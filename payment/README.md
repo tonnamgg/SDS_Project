@@ -36,15 +36,16 @@ The service uses Python's standard library plus the dependencies listed in
 
 4. **Configure the service (optional)**
 
-	 The host, port, available mock balance, and Product Catalog URL can be
-	 overridden with `PAYMENT_HOST`, `PAYMENT_PORT`, `PAYMENT_BALANCE`, and
-	 `PRODUCT_CATALOG_URL`.
+	 Create a `.env` file in the `payment` folder:
 
 	 ```powershell
-	 $env:PAYMENT_BALANCE = "500.00"
-	 $env:PRODUCT_CATALOG_URL = "http://localhost:3000"
-	 python payment_service.py
+	 PAYMENT_HOST=0.0.0.0
+	 PAYMENT_PORT=8082
+	 PRODUCT_CATALOG_URL=http://localhost:3000
 	 ```
+
+	 The service loads these values automatically when it starts. The payment
+	 balance starts at `0` and must be added through `POST /api/payment/balance`.
 
 ---
 
@@ -65,8 +66,7 @@ name or network address with `PRODUCT_CATALOG_URL`:
 ```powershell
 docker run -d --name payment-mock `
 	-p 8082:8082 `
-	-e PAYMENT_BALANCE=500.00 `
-	-e PRODUCT_CATALOG_URL=http://product-catalog:3000 `
+	-e PRODUCT_CATALOG_URL=http://localhost:3000 `
 	payment-mock
 ```
 
@@ -90,19 +90,22 @@ Product Catalog and calculates `amount = price * quantity`. It then charges the
 payment balance and updates the product stock through
 `PUT /api/admin/products/:sku`. Payments succeed only when both the requested
 quantity is in stock and the calculated amount is within the current balance.
-The initial balance can come from `PAYMENT_BALANCE` (default: `100000.00`) or
-be added at runtime with the balance top-up endpoint below:
+Because the service starts with a balance of `0`, add funds at runtime with the
+balance top-up endpoint below before making a payment.
+
+The following successful payment example assumes the balance was previously
+topped up to `100000.00`:
 
 ```json
 {
-	"status": "success",
-	"transaction_id": "txn_abc123...",
-	"sku": "CPU-INT-14900K",
-	"quantity": 2,
-	"unit_price": 24900,
-	"amount": 49800,
-	"remaining_balance": 50200,
-	"remaining_stock": 13
+    "status": "success",
+    "transaction_id": "txn_592f37c43ad7",
+    "amount": 49800.0,
+    "remaining_balance": 50200.0,
+    "sku": "CPU-INT-14900K",
+    "quantity": 2,
+    "unit_price": 24900.0,
+    "remaining_stock": 9
 }
 ```
 
@@ -110,15 +113,14 @@ Amounts above the configured balance return HTTP `402`:
 
 ```json
 {
-	"status": "failed",
-	"reason": "insufficient_funds",
-	"transaction_id": "txn_abc123...",
-	"sku": "CPU-INT-14900K",
-	"quantity": 2,
-	"unit_price": 24900,
-	"amount": 49800,
-	"remaining_balance": 1000,
-	"remaining_stock": 13
+    "status": "failed",
+    "reason": "insufficient_funds",
+    "transaction_id": "txn_428a2d816e15",
+    "amount": 49800.0,
+    "remaining_balance": 400.0,
+    "sku": "CPU-INT-14900K",
+    "quantity": 2,
+    "unit_price": 24900.0
 }
 ```
 
@@ -138,7 +140,7 @@ stock remains above zero and becomes `Out of Stock` when stock reaches zero.
 
 ```json
 {
-	"balance": 50200
+	"balance": 400.0
 }
 ```
 
@@ -148,7 +150,7 @@ stock remains above zero and becomes `Out of Stock` when stock reaches zero.
 
 ```json
 {
-	"amount": 500.00
+	"amount": 600.0
 }
 ```
 
@@ -156,8 +158,8 @@ The response returns the added amount and the new balance:
 
 ```json
 {
-	"added_amount": 500,
-	"balance": 50700
+	"added_amount": 600.0,
+	"balance": 1000.0
 }
 ```
 
