@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
-	"log"
 	"fmt"
+	"log"
+	"product-catalog/models"
+	"strconv"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
-	"strconv"
-	
-	"product-catalog/models" 
 )
 
 const spreadsheetID = "1TizQw2siUgnzB88A-hfcYT1ajMn6q4pFcBYRShAKjnY"
-const sheetName = "Sheet1" 
+const sheetName = "Sheet1"
 
 func findRowBySKU(srv *sheets.Service, targetSKU string) (int, error) {
 	readRange := fmt.Sprintf("%s!A:A", sheetName) // อ่านเฉพาะคอลัมน์ A (SKU)
@@ -60,7 +61,7 @@ func main() {
 			if len(row) == 0 {
 				continue // ข้ามแถวว่าง
 			}
-			
+
 			price, _ := strconv.ParseFloat(getCellString(row, 4), 64)
 			stock, _ := strconv.Atoi(getCellString(row, 5))
 
@@ -83,39 +84,50 @@ func main() {
 	// 2. CREATE (POST) - เพิ่มข้อมูลใหม่
 	// ==========================================
 	app.Post("/api/admin/products", func(c *fiber.Ctx) error {
-	// 1. รับข้อมูลจาก Request เข้ามาเก็บใน Struct ที่ชื่อว่า 'p'
-	p := new(models.Product) 
-	
-	if err := c.BodyParser(p); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid input format"})
-	}
+		// 1. รับข้อมูลจาก Request เข้ามาเก็บใน Struct ที่ชื่อว่า 'p'
+		p := new(models.Product)
 
-	// 2. ดึงค่าจาก Struct 'p' มาเรียงลำดับให้ตรงกับคอลัมน์ใน Google Sheets
-	var vr sheets.ValueRange
-	val := []interface{}{
-		p.SKU, 
-		p.Name, 
-		p.Category, 
-		p.Brand, 
-		p.Price, 
-		p.Stock, 
-		p.Specs, 
-		p.ImageURL, 
-		p.Status,
-	}
-	vr.Values = append(vr.Values, val)
+		if err := c.BodyParser(p); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid input format"})
+		}
+		
+		if strings.TrimSpace(p.SKU) == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "SKU is required"})
+		}
 
-	// 3. ยิงคำสั่งบันทึกลง Google Sheets
-		_, err := srv.Spreadsheets.Values.Append(spreadsheetID, sheetName, &vr).
+		rowIdx, err := findRowBySKU(srv, p.SKU)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to verify SKU with database"})
+		}
+		if rowIdx != -1 {
+			return c.Status(400).JSON(fiber.Map{"error": "SKU already exists"})
+		}
+
+		// 2. ดึงค่าจาก Struct 'p' มาเรียงลำดับให้ตรงกับคอลัมน์ใน Google Sheets
+		var vr sheets.ValueRange
+		val := []interface{}{
+			p.SKU,
+			p.Name,
+			p.Category,
+			p.Brand,
+			p.Price,
+			p.Stock,
+			p.Specs,
+			p.ImageURL,
+			p.Status,
+		}
+		vr.Values = append(vr.Values, val)
+
+		// 3. ยิงคำสั่งบันทึกลง Google Sheets
+		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName, &vr).
 			ValueInputOption("USER_ENTERED").
 			Do()
 
 		if err != nil {
 			log.Printf("Google Sheets API Error: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to save data to sheet"})
-			
+
 		}
-		
 
 		return c.Status(201).JSON(fiber.Map{
 			"message": "Product created successfully",
@@ -128,7 +140,7 @@ func main() {
 	// ==========================================
 	app.Put("/api/admin/products/:sku", func(c *fiber.Ctx) error {
 		targetSKU := c.Params("sku")
-		
+
 		// หาว่าอยู่แถวไหน
 		rowIdx, err := findRowBySKU(srv, targetSKU)
 		if err != nil || rowIdx == -1 {
@@ -141,7 +153,7 @@ func main() {
 		}
 
 		updateRange := fmt.Sprintf("%s!A%d:J%d", sheetName, rowIdx, rowIdx)
-		
+
 		var vr sheets.ValueRange
 		// ไม่ยอมให้แก้ SKU (บังคับใช้ SKU เดิม)
 		val := []interface{}{targetSKU, p.Name, p.Category, p.Brand, p.Price, p.Stock, p.Specs, p.ImageURL, p.Status}
@@ -149,7 +161,7 @@ func main() {
 
 		_, err = srv.Spreadsheets.Values.Update(spreadsheetID, updateRange, &vr).
 			ValueInputOption("USER_ENTERED").Do()
-			
+
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to update data"})
 		}
@@ -163,7 +175,7 @@ func main() {
 	// ==========================================
 	app.Delete("/api/admin/products/:sku", func(c *fiber.Ctx) error {
 		targetSKU := c.Params("sku")
-		
+
 		rowIdx, err := findRowBySKU(srv, targetSKU)
 		if err != nil || rowIdx == -1 {
 			return c.Status(404).JSON(fiber.Map{"error": "Product not found"})
