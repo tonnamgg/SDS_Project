@@ -11,8 +11,8 @@ a simulated transaction ID.
 1. **Python:** version 3.10 or later
 2. **Docker:** for container deployment (optional)
 
-The service uses only Python's standard library, so no package installation is
-required.
+The service uses Python's standard library plus the dependencies listed in
+`requirements.txt`.
 
 ---
 
@@ -23,13 +23,18 @@ required.
 	 cd payment
 	 ```
 
-2. **Run the server**
+2. **Install dependencies**
+	 ```powershell
+	 python -m pip install -r requirements.txt
+	 ```
+
+3. **Run the server**
 	 ```powershell
 	 python payment_service.py
 	 ```
 	 *The server will run at `http://localhost:8082`.*
 
-3. **Configure the service (optional)**
+4. **Configure the service (optional)**
 
 	 The host, port, available mock balance, and Product Catalog URL can be
 	 overridden with `PAYMENT_HOST`, `PAYMENT_PORT`, `PAYMENT_BALANCE`, and
@@ -80,11 +85,13 @@ docker run -d --name payment-mock `
 }
 ```
 
-The service gets the product price from `GET /api/products` on the Product
-Catalog and calculates `amount = price * quantity`. Payments succeed when the
-calculated amount is less than or equal to the current balance. The initial
-balance can come from `PAYMENT_BALANCE` (default: `100000.00`) or be added at
-runtime with the balance top-up endpoint below:
+The service gets the product price and stock from `GET /api/products` on the
+Product Catalog and calculates `amount = price * quantity`. It then charges the
+payment balance and updates the product stock through
+`PUT /api/admin/products/:sku`. Payments succeed only when both the requested
+quantity is in stock and the calculated amount is within the current balance.
+The initial balance can come from `PAYMENT_BALANCE` (default: `100000.00`) or
+be added at runtime with the balance top-up endpoint below:
 
 ```json
 {
@@ -94,7 +101,8 @@ runtime with the balance top-up endpoint below:
 	"quantity": 2,
 	"unit_price": 24900,
 	"amount": 49800,
-	"remaining_balance": 50200
+	"remaining_balance": 50200,
+	"remaining_stock": 13
 }
 ```
 
@@ -109,13 +117,19 @@ Amounts above the configured balance return HTTP `402`:
 	"quantity": 2,
 	"unit_price": 24900,
 	"amount": 49800,
-	"remaining_balance": 1000
+	"remaining_balance": 1000,
+	"remaining_stock": 13
 }
 ```
 
 Invalid SKU or non-positive/non-integer quantities return HTTP `400`.
-Unknown SKUs return HTTP `404`, and an unavailable Product Catalog returns
-HTTP `502`.
+Unknown SKUs return HTTP `404`. Requests above available stock return HTTP
+`409`, and an unavailable Product Catalog or failed stock update returns HTTP
+`502`.
+
+The stock update preserves all existing product fields, including `specs` and
+`image_url`. It changes only `stock` and `status`: status remains `Active` when
+stock remains above zero and becomes `Out of Stock` when stock reaches zero.
 
 ### 2. Check Available Balance (GET)
 *   **URL:** `GET /api/payment/balance`

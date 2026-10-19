@@ -2,7 +2,7 @@ import json
 import unittest
 from http.client import HTTPConnection
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from payment_service import (
     PaymentHandler,
@@ -11,6 +11,7 @@ from payment_service import (
     add_balance,
     get_balance,
     process_payment,
+    update_product_stock,
 )
 
 
@@ -30,6 +31,32 @@ class PaymentLogicTests(unittest.TestCase):
         self.assertEqual(response["status"], "failed")
         self.assertEqual(response["reason"], "insufficient_funds")
         self.assertTrue(response["transaction_id"].startswith("txn_"))
+
+    @patch("payment_service.urlopen")
+    def test_stock_update_preserves_fields_and_sets_out_of_stock_status(
+        self, mock_urlopen
+    ):
+        response = MagicMock(status=200)
+        mock_urlopen.return_value.__enter__.return_value = response
+        product = {
+            "sku": "RAM-32GB",
+            "name": "Memory",
+            "price": 49.99,
+            "stock": 2,
+            "specs": "DDR5",
+            "image_url": "https://example.com/ram.jpg",
+            "status": "Active",
+        }
+
+        remaining_stock = update_product_stock(product, 2, "http://catalog:3000")
+
+        request = mock_urlopen.call_args.args[0]
+        updated_product = json.loads(request.data)
+        self.assertEqual(remaining_stock, 0)
+        self.assertEqual(updated_product["stock"], 0)
+        self.assertEqual(updated_product["status"], "Out of Stock")
+        self.assertEqual(updated_product["specs"], product["specs"])
+        self.assertEqual(updated_product["image_url"], product["image_url"])
 
 
 class PaymentHttpTests(unittest.TestCase):
@@ -96,8 +123,12 @@ class PaymentHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("quantity must be positive", body["error"])
 
-    @patch("payment_service.fetch_product_price", return_value=49.99)
-    def test_payment_endpoint_calculates_amount_from_catalog_price(self, _fetch_price):
+    @patch("payment_service.update_product_stock", return_value=8)
+    @patch(
+        "payment_service.fetch_product",
+        return_value={"sku": "RAM-32GB", "price": 49.99, "stock": 10},
+    )
+    def test_payment_updates_catalog_stock(self, _fetch_product, _update_stock):
         starting_balance = get_balance()
         status, body = self.post({"sku": "RAM-32GB", "quantity": 2})
 
@@ -107,10 +138,26 @@ class PaymentHttpTests(unittest.TestCase):
         self.assertEqual(body["quantity"], 2)
         self.assertEqual(body["unit_price"], 49.99)
         self.assertEqual(body["amount"], 99.98)
+        self.assertEqual(body["remaining_stock"], 8)
         self.assertEqual(body["remaining_balance"], round(starting_balance - 99.98, 2))
+        _update_stock.assert_called_once_with(
+            {"sku": "RAM-32GB", "price": 49.99, "stock": 10}, 2
+        )
 
-    @patch("payment_service.fetch_product_price", side_effect=ProductCatalogError)
-    def test_catalog_failure_is_reported(self, _fetch_price):
+    @patch("payment_service.update_product_stock", return_value=8)
+    @patch(
+        "payment_service.fetch_product",
+        return_value={"sku": "RAM-32GB", "price": 49.99, "stock": 1},
+    )
+    def test_payment_rejects_quantity_above_stock(self, _fetch_product, _update_stock):
+        status, body = self.post({"sku": "RAM-32GB", "quantity": 2})
+
+        self.assertEqual(status, 409)
+        self.assertEqual(body["error"], "insufficient_stock")
+        _update_stock.assert_not_called()
+
+    @patch("payment_service.fetch_product", side_effect=ProductCatalogError)
+    def test_catalog_failure_is_reported(self, _fetch_product):
         status, body = self.post({"sku": "RAM-32GB", "quantity": 2})
 
         self.assertEqual(status, 502)

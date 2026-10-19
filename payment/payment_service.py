@@ -10,13 +10,16 @@ import json
 import math
 import os
 import uuid
+from dotenv import load_dotenv
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Lock
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
+load_dotenv()
 
 HOST = os.getenv("PAYMENT_HOST", "0.0.0.0")
 PORT = int(os.getenv("PAYMENT_PORT", "8082"))
@@ -34,8 +37,12 @@ class ProductNotFoundError(ProductCatalogError):
     """Raised when the requested SKU does not exist in the catalog."""
 
 
-def fetch_product_price(sku: str, catalog_url: str | None = None) -> float:
-    """Fetch and return the price for a SKU from the Product Catalog."""
+class ProductStockError(ProductCatalogError):
+    """Raised when the requested quantity exceeds the available stock."""
+
+
+def fetch_product(sku: str, catalog_url: str | None = None) -> dict[str, Any]:
+    """Fetch a complete product record for a SKU from the Product Catalog."""
     if catalog_url is None:
         catalog_url = PRODUCT_CATALOG_URL
 
@@ -53,15 +60,45 @@ def fetch_product_price(sku: str, catalog_url: str | None = None) -> float:
         if not isinstance(product, dict) or product.get("sku") != sku:
             continue
 
-        price = product.get("price")
-        if isinstance(price, bool) or not isinstance(price, (int, float)):
-            raise ProductCatalogError
-        price = float(price)
-        if not math.isfinite(price) or price <= 0:
-            raise ProductCatalogError
-        return price
+        return product
 
     raise ProductNotFoundError
+
+
+def update_product_stock(
+    product: dict[str, Any], quantity: int, catalog_url: str | None = None
+) -> int:
+    """Subtract quantity from the catalog product and return remaining stock."""
+    if catalog_url is None:
+        catalog_url = PRODUCT_CATALOG_URL
+
+    stock = product.get("stock")
+    if isinstance(stock, bool) or not isinstance(stock, int) or stock < quantity:
+        raise ProductStockError
+
+    updated_product = dict(product)
+    remaining_stock = stock - quantity
+    updated_product["stock"] = remaining_stock
+    updated_product["status"] = "Out of Stock" if remaining_stock == 0 else "Active"
+    product_url = (
+        f"{catalog_url.rstrip('/')}/api/admin/products/"
+        f"{quote(str(product['sku']), safe='')}"
+    )
+    request = Request(
+        product_url,
+        data=json.dumps(updated_product).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="PUT",
+    )
+
+    try:
+        with urlopen(request, timeout=5) as response:
+            if response.status >= 400:
+                raise ProductCatalogError
+    except (HTTPError, URLError, TimeoutError) as error:
+        raise ProductCatalogError from error
+
+    return remaining_stock
 
 
 def process_payment(
@@ -117,6 +154,11 @@ def add_balance(amount: float) -> float:
         return current_balance
 
 
+def refund_balance(amount: float) -> float:
+    """Return funds to the balance when a payment cannot be completed."""
+    return add_balance(amount)
+
+
 class PaymentHandler(BaseHTTPRequestHandler):
     """Handle the payment mock HTTP API."""
 
@@ -155,7 +197,7 @@ class PaymentHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            unit_price = fetch_product_price(sku)
+            product = fetch_product(sku)
         except ProductNotFoundError:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "product_not_found"})
             return
@@ -166,9 +208,48 @@ class PaymentHandler(BaseHTTPRequestHandler):
             )
             return
 
+        price = product.get("price")
+        if isinstance(price, bool) or not isinstance(price, (int, float)):
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
+            return
+        unit_price = float(price)
+        if not math.isfinite(unit_price) or unit_price <= 0:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
+            return
+
+        stock = product.get("stock")
+        if isinstance(stock, bool) or not isinstance(stock, int):
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
+            return
+        if quantity > stock:
+            self._send_json(HTTPStatus.CONFLICT, {"error": "insufficient_stock"})
+            return
+
         amount = unit_price * quantity
         status, response = process_payment(amount)
-        response.update({"sku": sku, "quantity": quantity, "unit_price": unit_price})
+        if status != HTTPStatus.OK:
+            response.update({"sku": sku, "quantity": quantity, "unit_price": unit_price})
+            self._send_json(status, response)
+            return
+
+        try:
+            remaining_stock = update_product_stock(product, quantity)
+        except ProductCatalogError:
+            refund_balance(amount)
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"error": "product_catalog_update_failed"},
+            )
+            return
+
+        response.update(
+            {
+                "sku": sku,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "remaining_stock": remaining_stock,
+            }
+        )
         self._send_json(status, response)
 
     def _handle_balance_top_up(self) -> None:
