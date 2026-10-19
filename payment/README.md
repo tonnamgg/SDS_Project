@@ -11,7 +11,7 @@ python payment_service.py
 
 The host and port can be overridden with `PAYMENT_HOST` and `PAYMENT_PORT`.
 
-Then run this in new terminal.
+Then run this in new terminal (if you want to do it in terminal).
 
 ```
 curl.exe -X POST http://localhost:8082/pay `
