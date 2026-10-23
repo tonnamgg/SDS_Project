@@ -121,7 +121,59 @@ class PaymentHttpTests(unittest.TestCase):
         status, body = self.post({"sku": "CPU-INT-14900K", "quantity": 0})
 
         self.assertEqual(status, 400)
-        self.assertIn("quantity must be positive", body["error"])
+        self.assertIn("positive integer quantity", body["error"])
+
+    def test_multiple_items_are_charged_and_stock_is_updated(self):
+        add_balance(25000.00)
+        starting_balance = get_balance()
+        products = {
+            "CPU-INT-14900K": {
+                "sku": "CPU-INT-14900K",
+                "price": 24900.0,
+                "stock": 5,
+            },
+            "RAM-32GB": {"sku": "RAM-32GB", "price": 49.99, "stock": 10},
+        }
+
+        with patch(
+            "payment_service.fetch_product",
+            side_effect=lambda sku: products[sku],
+        ) as fetch_product, patch(
+            "payment_service.update_product_stock",
+            side_effect=[4, 8],
+        ) as update_stock:
+            status, body = self.post(
+                {
+                    "items": [
+                        {"sku": "CPU-INT-14900K", "quantity": 1},
+                        {"sku": "RAM-32GB", "quantity": 2},
+                    ]
+                }
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["amount"], 24999.98)
+        self.assertEqual(body["remaining_balance"], round(starting_balance - 24999.98, 2))
+        self.assertEqual(
+            body["items"],
+            [
+                {
+                    "sku": "CPU-INT-14900K",
+                    "quantity": 1,
+                    "unit_price": 24900.0,
+                    "remaining_stock": 4,
+                },
+                {
+                    "sku": "RAM-32GB",
+                    "quantity": 2,
+                    "unit_price": 49.99,
+                    "remaining_stock": 8,
+                },
+            ],
+        )
+        self.assertEqual(fetch_product.call_count, 2)
+        self.assertEqual(update_stock.call_count, 2)
 
     @patch("payment_service.update_product_stock", return_value=8)
     @patch(

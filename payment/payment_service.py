@@ -40,6 +40,35 @@ class ProductStockError(ProductCatalogError):
     """Raised when the requested quantity exceeds the available stock."""
 
 
+def parse_payment_items(payload: Any) -> tuple[list[dict[str, Any]], bool]:
+    """Validate a payment payload and return normalized items plus legacy flag."""
+    if not isinstance(payload, dict):
+        raise ValueError
+
+    is_legacy = "items" not in payload
+    raw_items = (
+        [{"sku": payload["sku"], "quantity": payload["quantity"]}]
+        if is_legacy
+        else payload["items"]
+    )
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ValueError
+
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            raise ValueError
+        sku = item["sku"]
+        quantity = item["quantity"]
+        if not isinstance(sku, str) or not sku.strip():
+            raise ValueError
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+            raise ValueError
+        items.append({"sku": sku, "quantity": quantity})
+
+    return items, is_legacy
+
+
 def fetch_product(sku: str, catalog_url: str | None = None) -> dict[str, Any]:
     """Fetch a complete product record for a SKU from the Product Catalog."""
     if catalog_url is None:
@@ -180,59 +209,92 @@ class PaymentHandler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(content_length))
-            sku = payload["sku"]
-            quantity = payload["quantity"]
-            if not isinstance(sku, str) or not sku.strip():
-                raise ValueError
-            if isinstance(quantity, bool) or not isinstance(quantity, int):
-                raise ValueError
-            if quantity <= 0:
-                raise ValueError
+            items, is_legacy = parse_payment_items(payload)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
-                {"error": "sku and quantity must be provided; quantity must be positive"},
+                {
+                    "error": (
+                        "items must contain at least one sku and positive integer "
+                        "quantity"
+                    )
+                },
             )
             return
 
-        try:
-            product = fetch_product(sku)
-        except ProductNotFoundError:
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": "product_not_found"})
-            return
-        except ProductCatalogError:
-            self._send_json(
-                HTTPStatus.BAD_GATEWAY,
-                {"error": "product_catalog_unavailable"},
-            )
-            return
+        quantities: dict[str, int] = {}
+        for item in items:
+            quantities[item["sku"]] = quantities.get(item["sku"], 0) + item["quantity"]
 
-        price = product.get("price")
-        if isinstance(price, bool) or not isinstance(price, (int, float)):
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
-            return
-        unit_price = float(price)
-        if not math.isfinite(unit_price) or unit_price <= 0:
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
-            return
+        products: dict[str, dict[str, Any]] = {}
+        prices: dict[str, float] = {}
+        for sku, quantity in quantities.items():
+            try:
+                product = fetch_product(sku)
+            except ProductNotFoundError:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "product_not_found"})
+                return
+            except ProductCatalogError:
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": "product_catalog_unavailable"},
+                )
+                return
 
-        stock = product.get("stock")
-        if isinstance(stock, bool) or not isinstance(stock, int):
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"})
-            return
-        if quantity > stock:
-            self._send_json(HTTPStatus.CONFLICT, {"error": "insufficient_stock"})
-            return
+            price = product.get("price")
+            if isinstance(price, bool) or not isinstance(price, (int, float)):
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"}
+                )
+                return
+            unit_price = float(price)
+            if not math.isfinite(unit_price) or unit_price <= 0:
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"}
+                )
+                return
 
-        amount = unit_price * quantity
+            stock = product.get("stock")
+            if isinstance(stock, bool) or not isinstance(stock, int):
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"}
+                )
+                return
+            if quantity > stock:
+                self._send_json(HTTPStatus.CONFLICT, {"error": "insufficient_stock"})
+                return
+
+            products[sku] = product
+            prices[sku] = unit_price
+
+        amount = sum(prices[sku] * quantity for sku, quantity in quantities.items())
         status, response = process_payment(amount)
         if status != HTTPStatus.OK:
-            response.update({"sku": sku, "quantity": quantity, "unit_price": unit_price})
+            if is_legacy:
+                item = items[0]
+                response.update(
+                    {
+                        "sku": item["sku"],
+                        "quantity": item["quantity"],
+                        "unit_price": prices[item["sku"]],
+                    }
+                )
+            else:
+                response["items"] = [
+                    {
+                        "sku": item["sku"],
+                        "quantity": item["quantity"],
+                        "unit_price": prices[item["sku"]],
+                    }
+                    for item in items
+                ]
             self._send_json(status, response)
             return
 
+        remaining_stocks: dict[str, int] = {}
         try:
-            remaining_stock = update_product_stock(product, quantity)
+            for sku, quantity in quantities.items():
+                remaining_stocks[sku] = update_product_stock(products[sku], quantity)
         except ProductCatalogError:
             refund_balance(amount)
             self._send_json(
@@ -241,14 +303,26 @@ class PaymentHandler(BaseHTTPRequestHandler):
             )
             return
 
-        response.update(
-            {
-                "sku": sku,
-                "quantity": quantity,
-                "unit_price": unit_price,
-                "remaining_stock": remaining_stock,
-            }
-        )
+        if is_legacy:
+            item = items[0]
+            response.update(
+                {
+                    "sku": item["sku"],
+                    "quantity": item["quantity"],
+                    "unit_price": prices[item["sku"]],
+                    "remaining_stock": remaining_stocks[item["sku"]],
+                }
+            )
+        else:
+            response["items"] = [
+                {
+                    "sku": item["sku"],
+                    "quantity": item["quantity"],
+                    "unit_price": prices[item["sku"]],
+                    "remaining_stock": remaining_stocks[item["sku"]],
+                }
+                for item in items
+            ]
         self._send_json(status, response)
 
     def _handle_balance_top_up(self) -> None:

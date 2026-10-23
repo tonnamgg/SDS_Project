@@ -76,20 +76,24 @@ docker run -d --name payment-mock `
 
 ### 1. Process a Payment (POST)
 *   **URL:** `POST /api/payment`
-*   **Body:** A product SKU and a positive integer quantity
+*   **Body:** One or more products, each with a positive integer quantity
 
 ```json
 {
-	"sku": "CPU-INT-14900K",
-	"quantity": 2
+	"items": [
+		{"sku": "CPU-INT-14900K", "quantity": 1},
+		{"sku": "RAM-32GB", "quantity": 2}
+	]
 }
 ```
 
-The service gets the product price and stock from `GET /api/products` on the
-Product Catalog and calculates `amount = price * quantity`. It then charges the
-payment balance and updates the product stock through
-`PUT /api/admin/products/:sku`. Payments succeed only when both the requested
-quantity is in stock and the calculated amount is within the current balance.
+The service gets the product price and stock for every item from `GET
+/api/products` on the Product Catalog and calculates the total as the sum of
+`price * quantity`. It then charges the payment balance and updates each
+product's stock through `PUT /api/admin/products/:sku`. Payments succeed only
+when every requested quantity is in stock and the calculated total is within
+the current balance. The original single-product body with `sku` and
+`quantity` is also supported for compatibility.
 Because the service starts with a balance of `0`, add funds at runtime with the
 balance top-up endpoint below before making a payment.
 
@@ -100,12 +104,22 @@ topped up to `100000.00`:
 {
     "status": "success",
     "transaction_id": "txn_592f37c43ad7",
-    "amount": 49800.0,
-    "remaining_balance": 50200.0,
-    "sku": "CPU-INT-14900K",
-    "quantity": 2,
-    "unit_price": 24900.0,
-    "remaining_stock": 9
+    "amount": 24999.98,
+    "remaining_balance": 75000.02,
+    "items": [
+        {
+            "sku": "CPU-INT-14900K",
+            "quantity": 1,
+            "unit_price": 24900.0,
+            "remaining_stock": 9
+        },
+        {
+            "sku": "RAM-32GB",
+            "quantity": 2,
+            "unit_price": 49.99,
+            "remaining_stock": 8
+        }
+    ]
 }
 ```
 
@@ -124,7 +138,8 @@ Amounts above the configured balance return HTTP `402`:
 }
 ```
 
-Invalid SKU or non-positive/non-integer quantities return HTTP `400`.
+An empty items list, invalid SKU, or non-positive/non-integer quantity returns
+HTTP `400`.
 Unknown SKUs return HTTP `404`. Requests above available stock return HTTP
 `409`, and an unavailable Product Catalog or failed stock update returns HTTP
 `502`.
