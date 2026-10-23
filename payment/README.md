@@ -1,6 +1,6 @@
-# 💳 Payment Mock Service (Python + Standard Library)
+# 💳 Payment API (Python + Standard Library)
 
-A deterministic mock payment service for the e-commerce system. It retrieves
+A deterministic payment service for the e-commerce system. It retrieves
 product prices and stock from the Product Catalog, processes payments against a
 service balance, and updates product stock after successful payments.
 
