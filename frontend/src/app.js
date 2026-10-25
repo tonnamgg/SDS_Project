@@ -1,6 +1,7 @@
 const API_BASE = window.FRONTEND_API_BASE || "http://localhost:8080";
 let products = [];
 let selectedProduct = null;
+let adminProducts = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -105,6 +106,115 @@ async function trackDelivery(event) {
   }
 }
 
+function showCustomerApp() {
+  $("auth-screen").classList.add("hidden");
+  $("admin-app").classList.add("hidden");
+  $("customer-app").classList.remove("hidden");
+  loadProducts();
+}
+
+function showAdminApp() {
+  $("auth-screen").classList.add("hidden");
+  $("customer-app").classList.add("hidden");
+  $("admin-app").classList.remove("hidden");
+  loadAdminProducts();
+}
+
+function logout() {
+  $("customer-app").classList.add("hidden");
+  $("admin-app").classList.add("hidden");
+  $("auth-screen").classList.remove("hidden");
+  $("auth-form").reset();
+}
+
+function showAdminMessage(message, error = false) {
+  const element = $("admin-message");
+  element.textContent = message;
+  element.className = `message${error ? " error" : ""}`;
+}
+
+function renderAdminProducts() {
+  $("admin-product-count").textContent = `${adminProducts.length} items`;
+  const container = $("admin-products");
+  if (!adminProducts.length) {
+    container.innerHTML = '<div class="empty">No catalog items found.</div>';
+    return;
+  }
+  container.innerHTML = adminProducts.map((product) => `
+    <div class="admin-product-row">
+      <div><strong>${product.name || "Unnamed product"}</strong><br><span class="small muted">${product.sku || "No SKU"}</span></div>
+      <span>${money(product.price)}</span>
+      <span>${product.stock} in stock</span>
+      <button class="secondary" data-delete-sku="${product.sku}">Delete</button>
+    </div>
+  `).join("");
+  container.querySelectorAll("[data-delete-sku]").forEach((button) => {
+    button.addEventListener("click", () => deleteProduct(button.dataset.deleteSku));
+  });
+}
+
+async function loadAdminProducts() {
+  $("admin-products").innerHTML = '<div class="empty">Loading catalog...</div>';
+  try {
+    adminProducts = await request("/api/products");
+    renderAdminProducts();
+  } catch (error) {
+    adminProducts = [];
+    renderAdminProducts();
+    showAdminMessage(`Failed to load catalog: ${error.message}`, true);
+  }
+}
+
+async function addProduct(event) {
+  event.preventDefault();
+  const product = {
+    sku: $("product-sku").value.trim(),
+    name: $("product-name").value.trim(),
+    category: $("product-category").value.trim(),
+    brand: $("product-brand").value.trim(),
+    price: Number($("product-price").value),
+    stock: Number($("product-stock").value),
+    image_url: $("product-image").value.trim(),
+    specs: $("product-specs").value.trim(),
+    status: Number($("product-stock").value) > 0 ? "Active" : "Out of Stock",
+  };
+  try {
+    await request("/api/admin/products", { method: "POST", body: JSON.stringify(product) });
+    $("product-form").reset();
+    showAdminMessage("Product added successfully");
+    await loadAdminProducts();
+  } catch (error) {
+    showAdminMessage(`Failed to add product: ${error.message}`, true);
+  }
+}
+
+async function deleteProduct(sku) {
+  if (!window.confirm(`Delete product ${sku}?`)) return;
+  try {
+    await request(`/api/admin/products/${encodeURIComponent(sku)}`, { method: "DELETE" });
+    showAdminMessage("Product deleted successfully");
+    await loadAdminProducts();
+  } catch (error) {
+    showAdminMessage(`Failed to delete product: ${error.message}`, true);
+  }
+}
+
+$("auth-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const username = $("username").value;
+  const password = $("password").value;
+  if (username === "admin" && password === "admin") {
+    showAdminApp();
+  } else {
+    showCustomerApp();
+  }
+});
+
+$("customer-logout").addEventListener("click", logout);
+$("admin-logout").addEventListener("click", logout);
+$("product-form").addEventListener("submit", addProduct);
+$("reload-admin-products").addEventListener("click", loadAdminProducts);
+
 $("reload-products").addEventListener("click", loadProducts);
 $("checkout-form").addEventListener("submit", checkout);
 $("tracking-form").addEventListener("submit", trackDelivery);
@@ -112,8 +222,4 @@ $("close-modal").addEventListener("click", () => $("checkout-modal").classList.a
 $("checkout-modal").addEventListener("click", (event) => {
   if (event.target.id === "checkout-modal") $("checkout-modal").classList.add("hidden");
 });
-document.querySelectorAll("[data-todo]").forEach((button) => {
-  button.addEventListener("click", () => showMessage(`${button.dataset.todo}: Admin API and permissions are still pending`));
-});
-
-loadProducts();
+// The authentication screen is shown first. API calls begin after the user chooses a role.
