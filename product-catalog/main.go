@@ -72,9 +72,9 @@ func main() {
 				Brand:    getCellString(row, 3),
 				Price:    price,
 				Stock:    stock,
-				Specs:    getCellString(row, 7),
-				ImageURL: getCellString(row, 8),
-				Status:   getCellString(row, 9),
+				Specs:    getCellString(row, 6),
+				ImageURL: getCellString(row, 7),
+				Status:   getCellString(row, 8),
 			})
 		}
 		return c.JSON(products)
@@ -90,7 +90,7 @@ func main() {
 		if err := c.BodyParser(p); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid input format"})
 		}
-		
+
 		if strings.TrimSpace(p.SKU) == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "SKU is required"})
 		}
