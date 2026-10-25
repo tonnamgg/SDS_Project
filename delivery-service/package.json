@@ -1,0 +1,19 @@
+{
+  "name": "delivery-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Delivery microservice for the Microservices E-Commerce Shop course project",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0"
+  }
+}
