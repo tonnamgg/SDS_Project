@@ -9,7 +9,7 @@ service balance, and updates product stock after successful payments.
 ## ⚙️ Prerequisites
 
 1. **Python:** version 3.10 or later
-2. **Product Catalog:** running locally at `http://localhost:3000` or available
+2. **Product Catalog:** running locally at `http://localhost:8081` or available
    as the Docker container `catalog-api`
 3. **Docker:** for container deployment (optional)
 

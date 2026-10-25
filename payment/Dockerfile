@@ -9,7 +9,7 @@ COPY payment_service.py .
 
 ENV PAYMENT_HOST=0.0.0.0
 ENV PAYMENT_PORT=8082
-ENV PRODUCT_CATALOG_URL=http://catalog-api:3000
+ENV PRODUCT_CATALOG_URL=http://catalog-api:8081
 
 EXPOSE 8082
 

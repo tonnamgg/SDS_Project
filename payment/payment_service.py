@@ -23,7 +23,7 @@ load_dotenv()
 
 HOST = os.getenv("PAYMENT_HOST", "0.0.0.0")
 PORT = int(os.getenv("PAYMENT_PORT", "8082"))
-PRODUCT_CATALOG_URL = os.getenv("PRODUCT_CATALOG_URL", "http://localhost:3000")
+PRODUCT_CATALOG_URL = os.getenv("PRODUCT_CATALOG_URL", "http://localhost:8081")
 current_balance = 0
 balance_lock = Lock()
 
