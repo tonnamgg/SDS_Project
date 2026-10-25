@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SDS Shop</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <a class="brand" href="#shop">SDS Shop</a>
+        <nav>
+          <a href="#shop">Products</a>
+          <a href="#tracking">Track Delivery</a>
+          <a href="#admin">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="hero" id="shop">
+        <div>
+          <p class="eyebrow">MICROSERVICES E-COMMERCE</p>
+          <h1>Choose your products and order</h1>
+          <p class="muted">Frontend connected to the API Gateway on port 8080</p>
+        </div>
+        <button class="secondary" id="reload-products">Reload Products</button>
+      </section>
+
+      <div id="global-message" class="message hidden"></div>
+
+      <section>
+        <div class="section-heading">
+          <h2>All Products</h2>
+          <span id="product-count" class="muted"></span>
+        </div>
+        <div id="products" class="product-grid">
+          <div class="empty">Loading products...</div>
+        </div>
+      </section>
+
+      <section class="two-column" id="tracking">
+        <div class="panel">
+          <p class="eyebrow">CUSTOMER</p>
+          <h2>Track Delivery</h2>
+          <p class="muted">Enter your Tracking ID to check the delivery status</p>
+          <form id="tracking-form" class="form-row">
+            <input id="tracking-id" required placeholder="e.g. TRK-123456" />
+            <button type="submit">Search</button>
+          </form>
+          <div id="tracking-result" class="result muted">No tracking information yet.</div>
+        </div>
+
+        <div class="panel" id="admin">
+          <p class="eyebrow">ADMIN</p>
+          <h2>System Management</h2>
+          <p class="muted">This section is ready to connect to the Admin API</p>
+          <div class="admin-actions">
+            <button class="secondary" data-todo="Add / remove products">Add / Remove Products</button>
+            <button class="secondary" data-todo="Update delivery status">Update Delivery Status</button>
+          </div>
+          <p class="small muted">Admin endpoint details and authentication are not defined yet.</p>
+        </div>
+      </section>
+    </main>
+
+    <div id="checkout-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <button class="close" id="close-modal" aria-label="Close">×</button>
+        <p class="eyebrow">CHECKOUT</p>
+        <h2 id="checkout-title">Place Order</h2>
+        <p id="checkout-price" class="muted"></p>
+        <form id="checkout-form">
+          <label for="checkout-quantity">Quantity</label>
+          <input id="checkout-quantity" type="number" min="1" value="1" required />
+          <button type="submit">Confirm Order</button>
+        </form>
+        <div id="checkout-result" class="result"></div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
