@@ -30,8 +30,9 @@ COPY --from=builder /app/api-server .
 # คัดลอกไฟล์ credentials.json มาด้วย (สำคัญมาก ไม่งั้นจะต่อ Google Sheets ไม่ได้)
 COPY credentials.json .
 
-# เปิดพอร์ต 3000 ให้ภายนอกสามารถเชื่อมต่อเข้ามาได้
-EXPOSE 3000
+
+# เปิดพอร์ต 8081 ให้ภายนอกสามารถเชื่อมต่อเข้ามาได้
+EXPOSE 8081
 
 # คำสั่งที่จะถูกรันเมื่อ Docker Container เริ่มทำงาน
 CMD ["./api-server"]

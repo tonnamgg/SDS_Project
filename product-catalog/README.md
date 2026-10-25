@@ -29,7 +29,7 @@ An API for managing a computer hardware product catalog, built with **Go (Golang
    ```bash
    go run main.go
    ```
-   *The server will run at `http://localhost:3000`*
+   *The server will run at `http://localhost:8081`*
 
 ---
 
@@ -45,7 +45,7 @@ docker build -t product-catalog-api .
 
 *For Windows (PowerShell):*
 ```powershell
-docker run -d --name catalog-api -p 3000:3000 product-catalog-api
+docker run -d --name catalog-api -p 8081:8081 product-catalog-api
 ```
 
 

@@ -215,5 +215,5 @@ func main() {
 		return c.JSON(fiber.Map{"message": "Product deleted successfully"})
 	})
 
-	log.Fatal(app.Listen(":3000"))
+	log.Fatal(app.Listen(":8081"))
 }
