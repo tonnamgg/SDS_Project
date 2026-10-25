@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: delivery-service
-          image: YOUR_DOCKERHUB_USERNAME/delivery-service:1.0.0
+          image: thedawnz/delivery-service:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
