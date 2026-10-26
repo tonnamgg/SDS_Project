@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delivery-service
+  labels:
+    app: delivery-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: delivery-service
+  template:
+    metadata:
+      labels:
+        app: delivery-service
+    spec:
+      containers:
+        - name: delivery-service
+          image: thedawnz/delivery-service:1.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8083
+          env:
+            - name: PORT
+              value: "8083"
+            - name: GOOGLE_SHEETS_SPREADSHEET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: delivery-service-config
+                  key: spreadsheet-id
+            - name: GOOGLE_SHEETS_TAB_NAME
+              value: "Deliveries"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/var/secrets/google/credentials.json"
+          volumeMounts:
+            - name: google-credentials
+              mountPath: /var/secrets/google
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+      volumes:
+        - name: google-credentials
+          secret:
+            secretName: delivery-google-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: delivery-service
+spec:
+  type: ClusterIP
+  selector:
+    app: delivery-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: 8083
