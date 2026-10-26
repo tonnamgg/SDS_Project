@@ -83,8 +83,9 @@ async function checkout(event) {
     // so SKU is used as the temporary product identifier.
     const body = { product_id: selectedProduct.sku, quantity };
     const response = await request("/api/checkout", { method: "POST", body: JSON.stringify(body) });
-    const tracking = response.tracking_id || response.trackingId || response.tracking || "No Tracking ID returned";
-    result.textContent = `Order placed successfully\nTracking ID: ${tracking}`;
+    const orderId = response.orderId || response.order_id || response.delivery?.orderId || "No Order ID returned";
+    const deliveryStatus = response.delivery?.status || response.status || "PROCESSING";
+    result.textContent = `Order placed successfully\nOrder ID: ${orderId}\nDelivery status: ${deliveryStatus}`;
     showMessage("Order placed successfully");
     await loadProducts();
   } catch (error) {
@@ -94,15 +95,15 @@ async function checkout(event) {
 
 async function trackDelivery(event) {
   event.preventDefault();
-  const trackingId = $("tracking-id").value.trim();
+  const orderId = $("tracking-id").value.trim();
   const result = $("tracking-result");
   result.textContent = "Searching...";
   try {
-    // Endpoint is left configurable until the Delivery Service contract is defined.
-    const response = await request(`/api/delivery/${encodeURIComponent(trackingId)}`);
+    // Delivery Service uses orderId. The browser still talks to the Gateway only.
+    const response = await request(`/api/deliveries/${encodeURIComponent(orderId)}`);
     result.textContent = JSON.stringify(response, null, 2);
   } catch (error) {
-    result.textContent = `Unable to search: ${error.message}\n(TODO: Confirm the Delivery API endpoint)`.trim();
+    result.textContent = `Unable to search: ${error.message}\n(TODO: API Gateway delivery route is not available yet.)`.trim();
   }
 }
 
@@ -145,11 +146,15 @@ function renderAdminProducts() {
       <div><strong>${product.name || "Unnamed product"}</strong><br><span class="small muted">${product.sku || "No SKU"}</span></div>
       <span>${money(product.price)}</span>
       <span>${product.stock} in stock</span>
+      <button class="secondary" data-edit-sku="${product.sku}">Edit</button>
       <button class="secondary" data-delete-sku="${product.sku}">Delete</button>
     </div>
   `).join("");
   container.querySelectorAll("[data-delete-sku]").forEach((button) => {
     button.addEventListener("click", () => deleteProduct(button.dataset.deleteSku));
+  });
+  container.querySelectorAll("[data-edit-sku]").forEach((button) => {
+    button.addEventListener("click", () => editProduct(button.dataset.editSku));
   });
 }
 
@@ -179,13 +184,38 @@ async function addProduct(event) {
     status: Number($("product-stock").value) > 0 ? "Active" : "Out of Stock",
   };
   try {
-    await request("/api/admin/products", { method: "POST", body: JSON.stringify(product) });
+    const editingSku = $("product-edit-sku").value.trim();
+    const path = editingSku
+      ? `/api/admin/products/${encodeURIComponent(editingSku)}`
+      : "/api/admin/products";
+    const method = editingSku ? "PUT" : "POST";
+    await request(path, { method, body: JSON.stringify(product) });
     $("product-form").reset();
-    showAdminMessage("Product added successfully");
+    $("product-edit-sku").value = "";
+    $("product-sku").disabled = false;
+    $("product-submit").textContent = "Add Product";
+    showAdminMessage(editingSku ? "Product updated successfully" : "Product added successfully");
     await loadAdminProducts();
   } catch (error) {
     showAdminMessage(`Failed to add product: ${error.message}`, true);
   }
+}
+
+function editProduct(sku) {
+  const product = adminProducts.find((item) => item.sku === sku);
+  if (!product) return;
+  $("product-edit-sku").value = product.sku || "";
+  $("product-sku").value = product.sku || "";
+  $("product-sku").disabled = true;
+  $("product-name").value = product.name || "";
+  $("product-category").value = product.category || "";
+  $("product-brand").value = product.brand || "";
+  $("product-price").value = product.price ?? "";
+  $("product-stock").value = product.stock ?? "";
+  $("product-image").value = product.image_url || "";
+  $("product-specs").value = product.specs || "";
+  $("product-submit").textContent = "Update Product";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function deleteProduct(sku) {
@@ -196,6 +226,24 @@ async function deleteProduct(sku) {
     await loadAdminProducts();
   } catch (error) {
     showAdminMessage(`Failed to delete product: ${error.message}`, true);
+  }
+}
+
+async function updateDeliveryStatus(event) {
+  event.preventDefault();
+  const orderId = $("delivery-order-id").value.trim();
+  const status = $("delivery-status").value;
+  const result = $("delivery-status-result");
+  result.textContent = "Updating delivery status...";
+  try {
+    const response = await request(`/api/deliveries/${encodeURIComponent(orderId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    result.textContent = `Updated ${response.orderId || orderId} to ${response.status || status}`;
+    showAdminMessage("Delivery status updated successfully");
+  } catch (error) {
+    result.textContent = `Unable to update delivery status: ${error.message}\n(TODO: API Gateway delivery route is not available yet.)`;
   }
 }
 
@@ -214,6 +262,7 @@ $("customer-logout").addEventListener("click", logout);
 $("admin-logout").addEventListener("click", logout);
 $("product-form").addEventListener("submit", addProduct);
 $("reload-admin-products").addEventListener("click", loadAdminProducts);
+$("delivery-status-form").addEventListener("submit", updateDeliveryStatus);
 
 $("reload-products").addEventListener("click", loadProducts);
 $("checkout-form").addEventListener("submit", checkout);

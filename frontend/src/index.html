@@ -47,8 +47,8 @@
         <section class="two-column" id="tracking">
           <div class="panel">
             <p class="eyebrow">CUSTOMER</p><h2>Track Delivery</h2>
-            <p class="muted">Enter your Tracking ID to check the delivery status</p>
-            <form id="tracking-form" class="form-row"><input id="tracking-id" required placeholder="e.g. TRK-123456" /><button type="submit">Search</button></form>
+            <p class="muted">Enter your Order ID to check the delivery status</p>
+            <form id="tracking-form" class="form-row"><input id="tracking-id" required placeholder="e.g. ORD-1001" /><button type="submit">Search</button></form>
             <div id="tracking-result" class="result muted">No tracking information yet.</div>
           </div>
         </section>
@@ -66,13 +66,31 @@
         <section class="panel admin-panel">
           <h2>Add Product</h2>
           <form id="product-form" class="admin-form">
+            <input id="product-edit-sku" type="hidden" />
             <input id="product-sku" required placeholder="SKU" /><input id="product-name" required placeholder="Product name" />
             <input id="product-category" placeholder="Category" /><input id="product-brand" placeholder="Brand" />
             <input id="product-price" required type="number" min="0" step="0.01" placeholder="Price" /><input id="product-stock" required type="number" min="0" step="1" placeholder="Stock" />
             <input id="product-image" placeholder="Image URL" /><input id="product-specs" placeholder="Specifications" />
-            <button type="submit">Add Product</button>
+            <button id="product-submit" type="submit">Add Product</button>
           </form>
           <p class="small muted">This demo authentication is client-side only. Real authentication belongs in the API Gateway.</p>
+        </section>
+        <section class="panel admin-panel">
+          <h2>Update Delivery Status</h2>
+          <form id="delivery-status-form" class="form-row">
+            <input id="delivery-order-id" required placeholder="Order ID" />
+            <select id="delivery-status" aria-label="Delivery status">
+              <option value="PENDING">PENDING</option>
+              <option value="PROCESSING">PROCESSING</option>
+              <option value="SHIPPED">SHIPPED</option>
+              <option value="IN_TRANSIT">IN_TRANSIT</option>
+              <option value="DELIVERED">DELIVERED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+            <button type="submit">Update Status</button>
+          </form>
+          <div id="delivery-status-result" class="result muted">No delivery update yet.</div>
+          <p class="small muted">TODO: This requires the API Gateway to expose PATCH /api/deliveries/:orderId/status.</p>
         </section>
         <section class="panel admin-panel"><div class="section-heading"><h2>Catalog Items</h2><span id="admin-product-count" class="muted"></span></div><div id="admin-products" class="admin-products"><div class="empty">Loading catalog...</div></div></section>
       </main>
