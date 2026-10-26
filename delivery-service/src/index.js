@@ -205,7 +205,9 @@ app.post("/deliveries", async (req, res) => {
     const existing = rows.find(row => row.orderId === orderId);
 
     if (existing) {
-      return res.status(200).json(publicDelivery(existing));
+      return res.status(409).json({
+        error: "A delivery already exists for this orderId"
+      });
     }
 
     const timestamp = now();

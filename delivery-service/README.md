@@ -122,6 +122,6 @@ Then call `http://localhost:8083/health`.
 ## Notes and limitations
 
 - This is a standalone implementation based on the README's stated requirements; the existing API Gateway and checkout code were not provided, so integration call sites may need adapting.
-- The create endpoint performs a duplicate check but Google Sheets is not transactional; simultaneous requests for the same order can still create duplicates. A production service should use a database with a unique constraint or add an idempotency mechanism.
+- The create endpoint rejects an existing `orderId` with HTTP `409 Conflict`, but Google Sheets is not transactional; simultaneous requests for the same order can still create duplicates. A production service should use a database with a unique constraint or add an idempotency mechanism.
 - This service does not independently verify payment. The checkout caller must only request delivery creation after payment succeeds, and the API should be restricted to trusted internal callers.
 - For an actual public deployment, add authentication/authorization and stricter delivery-status transition rules.
