@@ -8,7 +8,7 @@ Node.js + Express microservice for the Microservices E-Commerce Shop project. It
 2. Add a tab named `Deliveries`.
 3. Put these column headers in row 1:
 
-   `order_id | tracking_id | status | created_at | updated_at`
+   `order_id | status | created_at | updated_at | items`
 
 4. In Google Cloud Console, enable the Google Sheets API and create a service account key in JSON format.
 5. Share the spreadsheet with the service account's `client_email` as an Editor.
@@ -49,12 +49,6 @@ Get a delivery by order ID:
 
 ```powershell
 Invoke-RestMethod http://localhost:8083/deliveries/ORD-1001
-```
-
-Track by tracking ID:
-
-```powershell
-Invoke-RestMethod http://localhost:8083/deliveries/tracking/TRK-XXXXXXXX
 ```
 
 List deliveries:
