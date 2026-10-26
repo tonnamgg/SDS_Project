@@ -1,41 +1,162 @@
-# Frontend (Customer & Admin UI)
+# Frontend
 
-Frontend เบื้องต้นสำหรับ SDS Shop ใช้ HTML, CSS และ JavaScript แบบไม่พึ่ง build tool
+This is the customer and admin website for the SDS Shop project.
 
-โค้ดหน้าเว็บอยู่ในโฟลเดอร์ `src/` ได้แก่ `index.html`, `app.js` และ `style.css`
+The frontend uses simple HTML, CSS, and JavaScript. There is no build tool.
+The source files are in the `src` folder:
 
-## สิ่งที่ทำไว้แล้ว
+- `src/index.html` - page layout
+- `src/style.css` - page style
+- `src/app.js` - page logic and API calls
 
-- โหลดสินค้าโดยเรียก `GET http://localhost:8080/api/products`
-- เปิดหน้าต่าง Checkout และส่ง `POST http://localhost:8080/api/checkout`
-- ส่ง `product_id` โดยใช้ค่า SKU เป็น temporary product identifier
-- มีหน้าสำหรับกรอก Tracking ID
-- มีโครงหน้า Admin สำหรับเพิ่ม/ลดสินค้าและอัปเดตสถานะจัดส่ง
-- ส่วนที่ยังไม่มี API contract จะแสดงเป็น TODO แทนการเดาพฤติกรรม
+## Main idea
 
-## Run แบบง่าย
+The browser must call the API Gateway only.
 
-เปิด `index.html` ผ่าน static server ที่ port 3000 เช่น:
-
-```powershell
-npx serve . -l 3000
+```text
+Frontend :3000
+    |
+    v
+API Gateway :8080
+    |
+    +-- Product Catalog :8081
+    +-- Payment Service :8082
+    +-- Delivery Service :8083
 ```
 
-หรือ build และรันด้วย Docker:
+The frontend does not call Product Catalog, Payment, or Delivery directly.
+
+## Login demo
+
+The login is only a simple frontend demo:
+
+- Username: `admin`
+- Password: `admin`
+
+Using these values opens the Admin Product Catalog page.
+Any other username and password opens the normal Customer page.
+
+This is not real security. Real authentication should be checked by the API Gateway.
+
+## Customer page
+
+The customer page can:
+
+- Show products
+- Open the checkout form
+- Send a checkout request
+- Search delivery status with an Order ID
+
+The frontend expects these Gateway routes:
+
+```text
+GET  /api/products
+POST /api/checkout
+GET  /api/deliveries/:orderId
+```
+
+The checkout request currently sends:
+
+```json
+{
+  "product_id": "CPU-INT-14900K",
+  "quantity": 1
+}
+```
+
+The product SKU is used as the temporary `product_id`.
+
+## Admin page
+
+The admin page can:
+
+- Add a product
+- Edit a product
+- Delete a product
+- Update delivery status
+
+The frontend expects these Gateway routes:
+
+```text
+GET    /api/products
+POST   /api/admin/products
+PUT    /api/admin/products/:sku
+DELETE /api/admin/products/:sku
+PATCH  /api/deliveries/:orderId/status
+```
+
+Allowed delivery statuses:
+
+```text
+PENDING
+PROCESSING
+SHIPPED
+IN_TRANSIT
+DELIVERED
+CANCELLED
+```
+
+## Run with Docker
+
+Build the image:
 
 ```powershell
+cd frontend
 docker build -t sds-frontend .
+```
+
+Run the container:
+
+```powershell
 docker run --rm -p 3000:3000 sds-frontend
 ```
 
-เปิด `http://localhost:3000`
+Open the website:
 
-ถ้า API Gateway ไม่ได้อยู่ที่ `http://localhost:8080` ให้แก้ค่า `API_BASE` ใน `app.js`
+```text
+http://localhost:3000
+```
 
-## TODO ที่รอข้อมูลจาก service อื่น
+## Run without Docker
 
-- รูปแบบ response ของ checkout และชื่อ field ของ Tracking ID
-- Delivery tracking endpoint
+You can use any simple static server. For example:
+
+```powershell
+cd frontend
+npx serve . -l 3000
+```
+
+## API Gateway setting
+
+The default Gateway URL is:
+
+```text
+http://localhost:8080
+```
+
+This value is set in `src/app.js`:
+
+```javascript
+const API_BASE = window.FRONTEND_API_BASE || "http://localhost:8080";
+```
+
+If the Gateway uses another URL, change this value.
+
+## Waiting for the API Gateway
+
+The frontend is ready for the Gateway routes, but the Gateway source code is not in the project yet.
+
+Until the Gateway is running:
+
+- The website can open normally
+- The login screen works
+- The UI can be checked
+- Product and delivery API calls will show an error
+
+The following details still need to be confirmed with the Gateway developer:
+
+- Checkout response format
+- The returned Order ID field name
+- Delivery tracking response format
+- Error response format
 - Admin authentication
-- Admin product CRUD และ Delivery status update endpoint
-
