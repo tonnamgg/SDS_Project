@@ -1,4 +1,8 @@
-const API_BASE = window.FRONTEND_API_BASE || "http://localhost:8080";
+const queryApiBase = new URLSearchParams(window.location.search).get("api");
+const defaultApiBase = window.location.port === "3000"
+  ? window.location.origin
+  : `http://${window.location.hostname}:8080`;
+const API_BASE = (queryApiBase || window.FRONTEND_API_BASE || defaultApiBase).replace(/\/$/, "");
 let products = [];
 let selectedProduct = null;
 let adminProducts = [];

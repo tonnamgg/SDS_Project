@@ -26,6 +26,9 @@ API Gateway :8080
 
 The frontend does not call Product Catalog, Payment, or Delivery directly.
 
+When running with Docker, Nginx proxies `/api/*` to `api-gateway:8080`.
+This keeps browser requests on the same origin and avoids a local CORS problem.
+
 ## Login demo
 
 The login is only a simple frontend demo:
@@ -111,10 +114,22 @@ Run the container:
 docker run --rm -p 3000:3000 sds-frontend
 ```
 
+If the API Gateway is also running in Docker, use the shared network:
+
+```powershell
+docker run --rm --network sds-network -p 3000:3000 sds-frontend
+```
+
 Open the website:
 
 ```text
 http://localhost:3000
+```
+
+You can use another Gateway URL without rebuilding the image:
+
+```text
+http://localhost:3000/?api=http://localhost:8080
 ```
 
 ## Run without Docker
@@ -141,6 +156,8 @@ const API_BASE = window.FRONTEND_API_BASE || "http://localhost:8080";
 ```
 
 If the Gateway uses another URL, change this value.
+
+The URL can also be passed in the browser with the `api` query parameter.
 
 ## Waiting for the API Gateway
 
