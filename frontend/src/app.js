@@ -68,6 +68,50 @@ async function loadProducts() {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function renderDelivery(delivery) {
+  const result = $("tracking-result");
+  const status = String(delivery.status || "PENDING").toUpperCase();
+  const statuses = ["PENDING", "PROCESSING", "SHIPPED", "IN_TRANSIT", "DELIVERED"];
+  const currentIndex = statuses.indexOf(status);
+  const items = Array.isArray(delivery.items) ? delivery.items : [];
+
+  const itemMarkup = items.length
+    ? items.map((item) => {
+        const product = products.find((entry) => entry.sku === item.sku) || {};
+        const image = product.image_url || "https://placehold.co/120x120/eef2ff/536dfe?text=Item";
+        return `<div class="delivery-item">
+          <img src="${escapeHtml(image)}" alt="${escapeHtml(item.name || item.sku)}" onerror="this.src='https://placehold.co/120x120/eef2ff/536dfe?text=Item'" />
+          <div class="delivery-item-info"><strong>${escapeHtml(item.name || "Unnamed item")}</strong><span class="small muted">${escapeHtml(item.sku || "No SKU")}</span></div>
+          <span class="delivery-quantity">× ${escapeHtml(item.quantity)}</span>
+        </div>`;
+      }).join("")
+    : '<p class="muted">No items in this order.</p>';
+
+  result.className = "result delivery-result";
+  result.innerHTML = `<div class="delivery-summary">
+    <div><span class="eyebrow">ORDER</span><h3>${escapeHtml(delivery.orderId || "Unknown order")}</h3></div>
+    <span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status.replaceAll("_", " "))}</span>
+  </div>
+  <div class="delivery-meta"><span>Created <strong>${escapeHtml(formatDate(delivery.createdAt))}</strong></span><span>Updated <strong>${escapeHtml(formatDate(delivery.updatedAt))}</strong></span></div>
+  <div class="delivery-timeline">${statuses.map((step, index) => `<div class="timeline-step ${index <= currentIndex ? "active" : ""}"><span class="timeline-dot"></span><span>${step.replaceAll("_", " ")}</span></div>`).join("")}</div>
+  <div class="delivery-items"><h4>Items</h4>${itemMarkup}</div>`;
+}
+
 function openCheckout(product) {
   selectedProduct = product;
   $("checkout-title").textContent = `Order ${product.name || product.sku}`;
@@ -105,7 +149,7 @@ async function trackDelivery(event) {
   try {
     // Delivery Service uses orderId. The browser still talks to the Gateway only.
     const response = await request(`/api/delivery/${encodeURIComponent(orderId)}`);
-    result.textContent = JSON.stringify(response, null, 2);
+    renderDelivery(response);
   } catch (error) {
     result.textContent = `Unable to search: ${error.message}\n(TODO: API Gateway delivery route is not available yet.)`.trim();
   }
