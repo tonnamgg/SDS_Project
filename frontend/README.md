@@ -55,7 +55,7 @@ The frontend expects these Gateway routes:
 ```text
 GET  /api/products
 POST /api/checkout
-GET  /api/deliveries/:orderId
+GET  /api/delivery/:orderId
 ```
 
 The checkout request currently sends:
@@ -85,7 +85,7 @@ GET    /api/products
 POST   /api/admin/products
 PUT    /api/admin/products/:sku
 DELETE /api/admin/products/:sku
-PATCH  /api/deliveries/:orderId/status
+PATCH  /api/delivery/:orderId/status
 ```
 
 Allowed delivery statuses:

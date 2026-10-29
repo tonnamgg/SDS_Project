@@ -104,7 +104,7 @@ async function trackDelivery(event) {
   result.textContent = "Searching...";
   try {
     // Delivery Service uses orderId. The browser still talks to the Gateway only.
-    const response = await request(`/api/deliveries/${encodeURIComponent(orderId)}`);
+    const response = await request(`/api/delivery/${encodeURIComponent(orderId)}`);
     result.textContent = JSON.stringify(response, null, 2);
   } catch (error) {
     result.textContent = `Unable to search: ${error.message}\n(TODO: API Gateway delivery route is not available yet.)`.trim();
@@ -240,7 +240,7 @@ async function updateDeliveryStatus(event) {
   const result = $("delivery-status-result");
   result.textContent = "Updating delivery status...";
   try {
-    const response = await request(`/api/deliveries/${encodeURIComponent(orderId)}/status`, {
+    const response = await request(`/api/delivery/${encodeURIComponent(orderId)}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
