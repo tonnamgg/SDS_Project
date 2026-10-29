@@ -14,6 +14,7 @@ The API Gateway listens on port `8080` (exposed via NodePort `30080` in Kubernet
 | `GET /api/products` | **Product Catalog** | `http://product-catalog:8081` | Fetch all products from Google Sheets |
 | `/api/admin/products` | **Product Catalog** | `http://product-catalog:8081` | Admin CRUD operations (POST, PUT, DELETE) |
 | `POST /api/checkout` | **Product Catalog** | `http://product-catalog:8081` | Trigger checkout and initiate payment process |
+| `/api/payment` | **Payment Service** | `http://payment-service:8082` | Process payments, add and check balance, and create deliveries |
 | `/api/delivery` | **Delivery Service** | `http://delivery-service:8083` | Track deliveries and update shipping status (rewrites to `/deliveries`) |
 
 ### Key Features

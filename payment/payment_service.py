@@ -24,6 +24,7 @@ load_dotenv()
 HOST = os.getenv("PAYMENT_HOST", "0.0.0.0")
 PORT = int(os.getenv("PAYMENT_PORT", "8082"))
 PRODUCT_CATALOG_URL = os.getenv("PRODUCT_CATALOG_URL", "http://localhost:8081")
+DELIVERY_SERVICE_URL = os.getenv("DELIVERY_SERVICE_URL", "")
 current_balance = 0
 balance_lock = Lock()
 
@@ -38,6 +39,46 @@ class ProductNotFoundError(ProductCatalogError):
 
 class ProductStockError(ProductCatalogError):
     """Raised when the requested quantity exceeds the available stock."""
+
+
+class DeliveryServiceError(Exception):
+    """Raised when the delivery service cannot create a delivery."""
+
+    def __init__(self, status: int | None = None) -> None:
+        super().__init__()
+        self.status = status
+
+
+def create_delivery(
+    order_id: str,
+    items: list[dict[str, Any]],
+    delivery_url: str | None = None,
+) -> dict[str, Any]:
+    """Create a delivery record for a successfully paid order."""
+    if delivery_url is None:
+        delivery_url = DELIVERY_SERVICE_URL
+    if not delivery_url:
+        return {}
+
+    request = Request(
+        f"{delivery_url.rstrip('/')}/deliveries",
+        data=json.dumps({"orderId": order_id, "items": items}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=5) as response:
+            if response.status >= 400:
+                raise DeliveryServiceError(response.status)
+            delivery = json.load(response)
+    except HTTPError as error:
+        raise DeliveryServiceError(error.code) from error
+    except (URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise DeliveryServiceError from error
+
+    if not isinstance(delivery, dict):
+        raise DeliveryServiceError
+    return delivery
 
 
 def parse_payment_items(payload: Any) -> tuple[list[dict[str, Any]], bool]:
@@ -247,6 +288,12 @@ class PaymentHandler(BaseHTTPRequestHandler):
                     HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"}
                 )
                 return
+            name = product.get("name")
+            if not isinstance(name, str) or not name.strip():
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY, {"error": "invalid_product_data"}
+                )
+                return
             unit_price = float(price)
             if not math.isfinite(unit_price) or unit_price <= 0:
                 self._send_json(
@@ -268,6 +315,16 @@ class PaymentHandler(BaseHTTPRequestHandler):
             prices[sku] = unit_price
 
         amount = sum(prices[sku] * quantity for sku, quantity in quantities.items())
+        order_id = str(payload.get("order_id") or "").strip()
+        if not order_id:
+            order_id = f"ORD-{uuid.uuid4().hex[:12].upper()}"
+        if len(order_id) > 100:
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "order_id must be 100 characters or fewer"},
+            )
+            return
+
         status, response = process_payment(amount)
         if status != HTTPStatus.OK:
             if is_legacy:
@@ -275,6 +332,7 @@ class PaymentHandler(BaseHTTPRequestHandler):
                 response.update(
                     {
                         "sku": item["sku"],
+                        "name": products[item["sku"]]["name"],
                         "quantity": item["quantity"],
                         "unit_price": prices[item["sku"]],
                     }
@@ -289,6 +347,34 @@ class PaymentHandler(BaseHTTPRequestHandler):
                     for item in items
                 ]
             self._send_json(status, response)
+            return
+
+        delivery_items = [
+            {
+                "sku": item["sku"],
+                "name": products[item["sku"]]["name"],
+                "quantity": item["quantity"],
+            }
+            for item in items
+        ]
+        try:
+            delivery = create_delivery(order_id, delivery_items)
+        except DeliveryServiceError as error:
+            print(
+                f"Delivery creation failed for {order_id}: "
+                f"{error.status or 'connection or response error'}"
+            )
+            refund_balance(amount)
+            if error.status == HTTPStatus.CONFLICT:
+                self._send_json(
+                    HTTPStatus.CONFLICT,
+                    {"error": "order_id_already_exists", "order_id": order_id},
+                )
+            else:
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": "delivery_service_unavailable"},
+                )
             return
 
         remaining_stocks: dict[str, int] = {}
@@ -308,6 +394,7 @@ class PaymentHandler(BaseHTTPRequestHandler):
             response.update(
                 {
                     "sku": item["sku"],
+                    "name": products[item["sku"]]["name"],
                     "quantity": item["quantity"],
                     "unit_price": prices[item["sku"]],
                     "remaining_stock": remaining_stocks[item["sku"]],
@@ -317,12 +404,17 @@ class PaymentHandler(BaseHTTPRequestHandler):
             response["items"] = [
                 {
                     "sku": item["sku"],
+                    "name": products[item["sku"]]["name"],
                     "quantity": item["quantity"],
                     "unit_price": prices[item["sku"]],
                     "remaining_stock": remaining_stocks[item["sku"]],
                 }
                 for item in items
             ]
+
+        response["order_id"] = order_id
+        if delivery:
+            response["delivery"] = delivery
         self._send_json(status, response)
 
     def _handle_balance_top_up(self) -> None:

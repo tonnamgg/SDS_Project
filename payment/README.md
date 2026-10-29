@@ -41,13 +41,14 @@ in `requirements.txt`.
    The payment service listens at `http://localhost:8082`.
 
 The default Product Catalog URL for a local Python process is
-`http://localhost:3000`. You can override the service configuration with a
+`http://localhost:8081`. You can override the service configuration with a
 `.env` file in the `payment` directory:
 
 ```text
 PAYMENT_HOST=0.0.0.0
 PAYMENT_PORT=8082
-PRODUCT_CATALOG_URL=http://localhost:3000
+PRODUCT_CATALOG_URL=http://localhost:8081
+DELIVERY_SERVICE_URL=http://localhost:8083
 ```
 
 ---
@@ -67,7 +68,7 @@ container is running as `catalog-api`.
 
 The payment and Product Catalog containers must be on the same Docker network.
 Inside a container, `localhost` refers to that same container. The payment
-service therefore reaches the catalog through `http://catalog-api:3000`.
+service therefore reaches the catalog through `http://catalog-api:8081`.
 
 **2. Create a shared Docker network**
 
@@ -81,18 +82,53 @@ docker network create sds-network
 docker network connect sds-network catalog-api
 ```
 
-**4. Run the payment container**
+**4. Run the delivery container**
+
+The payment container must reach the delivery container by its Docker network
+name, not `localhost`. Start delivery on the same network and provide its
+Google Sheets configuration:
 
 ```powershell
+cd ..\delivery-service
+docker build -t delivery-service:local .
+docker run -d --name delivery-service --network sds-network `
+  -p 8083:8083 `
+  -e PORT=8083 `
+  -e GOOGLE_SHEETS_SPREADSHEET_ID="YOUR_SPREADSHEET_ID" `
+  -e GOOGLE_SHEETS_TAB_NAME="Deliveries" `
+  -e GOOGLE_APPLICATION_CREDENTIALS="/var/secrets/google/credentials.json" `
+  -v "${PWD}\credentials.json:/var/secrets/google/credentials.json:ro" `
+  delivery-service:local
+```
+
+Wait until `http://localhost:8083/health` responds successfully before making
+a payment. The delivery service must also have access to the spreadsheet as
+described in its README.
+
+**5. Run the payment container**
+
+```powershell
+cd ..\payment
 docker run -d --name payment-api --network sds-network -p 8082:8082 product-payment-api
 ```
 
 The payment service is available from the host at `http://localhost:8082`.
+Inside Docker, it calls delivery at
+`http://delivery-service:8083`. Do not pass `payment/.env` unchanged to the
+container because its `DELIVERY_SERVICE_URL=http://localhost:8083` value is
+for local, non-container execution. If overriding the image default, use:
+
+```powershell
+docker run -d --name payment-api --network sds-network `
+  -p 8082:8082 `
+  -e DELIVERY_SERVICE_URL=http://delivery-service:8083 `
+  product-payment-api
+```
 
 If the network already exists, Docker may report an error for
 `docker network create`; continue with the remaining commands.
 
-**5. Check the payment container**
+**6. Check the payment container**
 
 ```powershell
 docker ps
@@ -144,19 +180,45 @@ topped up to `100000.00`:
     "items": [
         {
             "sku": "CPU-INT-14900K",
+            "name": "Intel Core i9-14900K",
             "quantity": 1,
             "unit_price": 24900.0,
             "remaining_stock": 9
         },
         {
             "sku": "MON-LG-27GR95QE",
+            "name": "LG 27GR95QE",
             "quantity": 2,
             "unit_price": 29900.0,
             "remaining_stock": 8
         }
-    ]
+    ],
+    "order_id": "ORD-7B7A7A5A4E2D",
+    "delivery": {
+        "orderId": "ORD-7B7A7A5A4E2D",
+        "status": "PROCESSING",
+        "items": [
+            {
+                "sku": "CPU-INT-14900K",
+                "name": "Intel Core i9-14900K",
+                "quantity": 1
+            },
+            {
+                "sku": "MON-LG-27GR95QE",
+                "name": "LG 27GR95QE",
+                "quantity": 2
+            }
+        ]
+    }
 }
 ```
+
+After payment and stock updates succeed, the service creates a delivery by
+calling `POST /deliveries` on `DELIVERY_SERVICE_URL`. If `order_id` is omitted,
+the service generates an `ORD-...` identifier. Supplying an existing
+`order_id` returns HTTP `409` and refunds the payment. If
+`DELIVERY_SERVICE_URL` is empty, delivery creation is disabled for local
+backwards-compatible operation.
 
 Trying to make the same payment again, but with remaining balance of 15300.0 will return HTTP `402`:
 
