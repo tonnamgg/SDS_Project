@@ -4,8 +4,10 @@ const defaultApiBase = window.location.port === "3000"
   : `http://${window.location.hostname}:8080`;
 const API_BASE = (queryApiBase || window.FRONTEND_API_BASE || defaultApiBase).replace(/\/$/, "");
 let products = [];
-let selectedProduct = null;
 let adminProducts = [];
+let cart = [];
+let selectedProduct = null;
+let selectedQuantity = 1;
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,6 +15,15 @@ function showMessage(message, error = false) {
   const element = $("global-message");
   element.textContent = message;
   element.className = `message${error ? " error" : ""}`;
+}
+
+function showToast(message, type = "success") {
+  const container = $("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 2800);
 }
 
 function money(value) {
@@ -47,12 +58,12 @@ function renderProducts() {
         <span class="muted">${product.brand || ""} ${product.category ? `· ${product.category}` : ""}</span>
         <div class="price">${money(product.price)}</div>
         <div class="stock ${unavailable ? "muted" : ""}">${unavailable ? "Out of stock" : `${product.stock} available`}</div>
-        <button data-product-index="${index}" ${unavailable ? "disabled" : ""}>Order</button>
+        <button data-product-index="${index}" ${unavailable ? "disabled" : ""}>Add to Cart</button>
       </div>
     </article>`;
   }).join("");
   container.querySelectorAll("[data-product-index]").forEach((button) => {
-    button.addEventListener("click", () => openCheckout(products[button.dataset.productIndex]));
+    button.addEventListener("click", () => openQuantitySelector(products[button.dataset.productIndex]));
   });
 }
 
@@ -112,12 +123,14 @@ function renderDelivery(delivery) {
   <div class="delivery-items"><h4>Items</h4>${itemMarkup}</div>`;
 }
 
-function openCheckout(product) {
+function openQuantitySelector(product) {
   selectedProduct = product;
-  $("checkout-title").textContent = `Order ${product.name || product.sku}`;
-  $("checkout-price").textContent = `${money(product.price)} · SKU: ${product.sku}`;
-  $("checkout-result").textContent = "";
-  $("checkout-modal").classList.remove("hidden");
+  selectedQuantity = 1;
+  $("quantity-product-title").textContent = product.name || product.sku;
+  $("quantity-product-price").textContent = `${money(product.price)} · SKU: ${product.sku}`;
+  $("quantity-stock").textContent = `${product.stock} available`;
+  $("quantity-value").textContent = selectedQuantity;
+  $("quantity-modal").classList.remove("hidden");
 }
 
 async function checkout(event) {
@@ -138,6 +151,114 @@ async function checkout(event) {
     await loadProducts();
   } catch (error) {
     result.textContent = `Order failed: ${error.message}`;
+  }
+}
+
+function addToCart(product, quantity = 1) {
+  const existing = cart.find((item) => item.sku === product.sku);
+  if (existing) {
+    if (existing.quantity + quantity > Number(product.stock)) {
+      showMessage("You cannot add more than the available stock", true);
+      return;
+    }
+    existing.quantity += quantity;
+  } else {
+    cart.push({ ...product, quantity });
+  }
+  renderCart();
+  showToast(`${product.name || product.sku} added to cart · ${cartQuantity()} item(s) in cart`);
+}
+
+function changeSelectedQuantity(amount) {
+  if (!selectedProduct) return;
+  selectedQuantity = Math.max(1, Math.min(Number(selectedProduct.stock), selectedQuantity + amount));
+  $("quantity-value").textContent = selectedQuantity;
+}
+
+function confirmAddToCart() {
+  if (!selectedProduct) return;
+  addToCart(selectedProduct, selectedQuantity);
+  $("quantity-modal").classList.add("hidden");
+}
+
+function cartQuantity() {
+  return cart.reduce((total, item) => total + item.quantity, 0);
+}
+
+function cartTotal() {
+  return cart.reduce((total, item) => total + Number(item.price || 0) * item.quantity, 0);
+}
+
+function renderCart() {
+  $("cart-count").textContent = cartQuantity();
+  const container = $("cart-items");
+  if (!cart.length) {
+    container.innerHTML = '<div class="empty">Your cart is empty.</div>';
+    $("cart-total-price").textContent = money(0);
+    $("confirm-cart").disabled = true;
+    return;
+  }
+  $("confirm-cart").disabled = false;
+  container.innerHTML = cart.map((item, index) => {
+    const image = item.image_url || "https://placehold.co/80x80/eef2ff/536dfe?text=Item";
+    return `<div class="cart-item">
+      <img src="${escapeHtml(image)}" alt="${escapeHtml(item.name || item.sku)}" onerror="this.src='https://placehold.co/80x80/eef2ff/536dfe?text=Item'" />
+      <div class="cart-item-info"><strong>${escapeHtml(item.name || "Unnamed product")}</strong><span class="small muted">${escapeHtml(item.sku)}</span><span>${money(item.price)} each</span></div>
+      <div class="quantity-control"><button type="button" data-cart-minus="${index}">−</button><span>${item.quantity}</span><button type="button" data-cart-plus="${index}">+</button></div>
+      <button class="remove-button" type="button" data-cart-remove="${index}">Remove</button>
+    </div>`;
+  }).join("");
+  $("cart-total-price").textContent = money(cartTotal());
+  container.querySelectorAll("[data-cart-minus]").forEach((button) => button.addEventListener("click", () => changeCartQuantity(Number(button.dataset.cartMinus), -1)));
+  container.querySelectorAll("[data-cart-plus]").forEach((button) => button.addEventListener("click", () => changeCartQuantity(Number(button.dataset.cartPlus), 1)));
+  container.querySelectorAll("[data-cart-remove]").forEach((button) => button.addEventListener("click", () => removeFromCart(Number(button.dataset.cartRemove))));
+}
+
+function changeCartQuantity(index, amount) {
+  const item = cart[index];
+  if (!item) return;
+  const nextQuantity = item.quantity + amount;
+  if (nextQuantity <= 0) return removeFromCart(index);
+  if (nextQuantity > Number(item.stock)) {
+    showMessage("You cannot add more than the available stock", true);
+    return;
+  }
+  item.quantity = nextQuantity;
+  renderCart();
+}
+
+function removeFromCart(index) {
+  cart.splice(index, 1);
+  renderCart();
+}
+
+function openCart() {
+  $("checkout-result").textContent = "";
+  renderCart();
+  $("checkout-modal").classList.remove("hidden");
+}
+
+async function checkout() {
+  if (!cart.length) return;
+  const result = $("checkout-result");
+  result.textContent = "Placing order...";
+  try {
+    const body = { items: cart.map((item) => ({ sku: item.sku, quantity: item.quantity })) };
+    const response = await request("/api/checkout", { method: "POST", body: JSON.stringify(body) });
+    const orderId = response.orderId || response.order_id || response.delivery?.orderId || "No Order ID returned";
+    const deliveryStatus = response.delivery?.status || response.status || "PROCESSING";
+    result.textContent = `Order placed successfully\nOrder ID: ${orderId}\nDelivery status: ${deliveryStatus}`;
+    showMessage("Order placed successfully");
+    cart = [];
+    renderCart();
+    await loadProducts();
+  } catch (error) {
+    if (error.message.includes("insufficient_stock") || error.message.includes("stock")) {
+      result.textContent = "Checkout failed: some items are no longer available. Please review your cart and try again.";
+      showToast("Stock changed before checkout. Please review your cart.", "error");
+    } else {
+      result.textContent = `Order failed: ${error.message}`;
+    }
   }
 }
 
@@ -314,10 +435,18 @@ $("reload-admin-products").addEventListener("click", loadAdminProducts);
 $("delivery-status-form").addEventListener("submit", updateDeliveryStatus);
 
 $("reload-products").addEventListener("click", loadProducts);
-$("checkout-form").addEventListener("submit", checkout);
+$("open-cart").addEventListener("click", openCart);
+$("confirm-cart").addEventListener("click", checkout);
+$("quantity-minus").addEventListener("click", () => changeSelectedQuantity(-1));
+$("quantity-plus").addEventListener("click", () => changeSelectedQuantity(1));
+$("confirm-add-cart").addEventListener("click", confirmAddToCart);
 $("tracking-form").addEventListener("submit", trackDelivery);
 $("close-modal").addEventListener("click", () => $("checkout-modal").classList.add("hidden"));
+$("close-quantity-modal").addEventListener("click", () => $("quantity-modal").classList.add("hidden"));
 $("checkout-modal").addEventListener("click", (event) => {
   if (event.target.id === "checkout-modal") $("checkout-modal").classList.add("hidden");
+});
+$("quantity-modal").addEventListener("click", (event) => {
+  if (event.target.id === "quantity-modal") $("quantity-modal").classList.add("hidden");
 });
 // The authentication screen is shown first. API calls begin after the user chooses a role.
