@@ -191,6 +191,7 @@ function renderAdminProducts() {
   }
   container.innerHTML = adminProducts.map((product) => `
     <div class="admin-product-row">
+      <img class="admin-product-thumb" src="${escapeHtml(product.image_url || "https://placehold.co/80x80/eef2ff/536dfe?text=Item")}" alt="${escapeHtml(product.name || product.sku)}" onerror="this.src='https://placehold.co/80x80/eef2ff/536dfe?text=Item'" />
       <div><strong>${product.name || "Unnamed product"}</strong><br><span class="small muted">${product.sku || "No SKU"}</span></div>
       <span>${money(product.price)}</span>
       <span>${product.stock} in stock</span>

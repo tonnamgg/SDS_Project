@@ -10,7 +10,8 @@ body { margin: 0; }
 .admin-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .admin-form button { grid-column: 1 / -1; }
 .admin-products { display: grid; gap: 8px; }
-.admin-product-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid #e4e8f2; border-radius: 10px; }
+.admin-product-row { display: grid; grid-template-columns: 52px 1fr auto auto auto auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid #e4e8f2; border-radius: 10px; }
+.admin-product-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; background: #edf1fa; }
 .admin-product-row button { padding: 7px 10px; }
 .container { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
 .topbar { background: #172033; color: white; position: sticky; top: 0; z-index: 2; }
