@@ -24,11 +24,11 @@ npm install
 $env:PORT="8083"
 $env:GOOGLE_SHEETS_SPREADSHEET_ID="YOUR_SPREADSHEET_ID"
 $env:GOOGLE_SHEETS_TAB_NAME="Deliveries"
-$env:GOOGLE_APPLICATION_CREDENTIALS="$PWD\credentials.json"
+$env:GOOGLE_APPLICATION_CREDENTIALS="$PWD\..\credentials.json"
 npm start
 ```
 
-Place your service-account JSON file at `credentials.json` in this directory. It is ignored by `.gitignore`.
+Place your service-account JSON file at `credentials.json` in the project root (shared with the other services). It is ignored by `.gitignore`. You can also copy `.env.example` to `.env` instead of setting the variables by hand. To run every service together, use `docker compose up --build` from the project root.
 
 Check health:
 
@@ -78,7 +78,7 @@ docker run --rm --name delivery-service --network sds-network -p 8083:8083 `
   -e GOOGLE_SHEETS_SPREADSHEET_ID="YOUR_SPREADSHEET_ID" `
   -e GOOGLE_SHEETS_TAB_NAME="Deliveries" `
   -e GOOGLE_APPLICATION_CREDENTIALS="/var/secrets/google/credentials.json" `
-  -v "${PWD}\credentials.json:/var/secrets/google/credentials.json:ro" `
+  -v "${PWD}\..\credentials.json:/var/secrets/google/credentials.json:ro" `
   YOUR_DOCKERHUB_USERNAME/delivery-service:1.0.0
 ```
 
@@ -95,7 +95,7 @@ Create a secret from your local JSON key:
 
 ```powershell
 kubectl create secret generic delivery-google-credentials `
-  --from-file=credentials.json=.\credentials.json
+  --from-file=credentials.json=..\credentials.json
 ```
 
 Edit `k8s/delivery-service.yaml` and replace `YOUR_DOCKERHUB_USERNAME` with your Docker Hub username. Build and push the image:

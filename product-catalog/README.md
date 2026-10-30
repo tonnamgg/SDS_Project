@@ -22,8 +22,10 @@ An API for managing a computer hardware product catalog, built with **Go (Golang
    ```
 
 2. **Configure the database (Google Sheets)**
-   * Place the `credentials.json` file in the same folder as `main.go`
+   * Place the `credentials.json` file in the project root (one level above this folder)
    * **Request the file from Tonnam**
+   * Copy `.env.example` to `.env` and set `GOOGLE_SHEETS_SPREADSHEET_ID` (the part of the sheet URL between `/d/` and `/edit`). `.env` is loaded automatically and is not committed.
+   * To run every service together, use `docker compose up --build` from the project root instead (it reads the root `.env`).
 
 3. **Run the server**
    ```bash
@@ -45,7 +47,10 @@ docker build -t product-catalog-api .
 
 *For Windows (PowerShell):*
 ```powershell
-docker run -d --name catalog-api -p 8081:8081 product-catalog-api
+docker run -d --name catalog-api -p 8081:8081 --env-file .env `
+  -e GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json `
+  -v "${PWD}\..\credentials.json:/app/credentials.json:ro" `
+  product-catalog-api
 ```
 
 

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SDS Shop</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    <section id="auth-screen" class="auth-screen">
+      <div class="auth-card">
+        <p class="eyebrow">SDS MICROSERVICES SHOP</p>
+        <h1>Welcome</h1>
+        <p class="muted">Sign in as an admin or continue as a customer.</p>
+        <form id="auth-form">
+          <label for="username">Username</label>
+          <input id="username" autocomplete="username" required />
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" required />
+          <button type="submit">Continue</button>
+        </form>
+        <p id="auth-message" class="small muted">Customer access is available with any credentials.</p>
+      </div>
+    </section>
+
+    <div id="customer-app" class="hidden">
+      <header class="topbar">
+        <div class="container topbar-inner">
+          <a class="brand" href="#shop">SDS Shop</a>
+          <nav>
+            <a href="#shop">Products</a>
+            <a href="#tracking">Track Delivery</a>
+            <button class="nav-button cart-button" id="open-cart">Cart <span id="cart-count">0</span></button>
+            <button class="nav-button" id="customer-logout">Logout</button>
+          </nav>
+        </div>
+      </header>
+      <main class="container">
+        <section class="hero" id="shop">
+          <div><p class="eyebrow">MICROSERVICES E-COMMERCE</p><h1>Choose your products and order</h1><p class="muted">Frontend connected to the API Gateway on port 8080</p></div>
+          <button class="secondary" id="reload-products">Reload Products</button>
+        </section>
+        <div id="global-message" class="message hidden"></div>
+        <section>
+          <div class="section-heading"><h2>All Products</h2><span id="product-count" class="muted"></span></div>
+          <div id="products" class="product-grid"><div class="empty">Loading products...</div></div>
+        </section>
+        <section class="two-column" id="tracking">
+          <div class="panel">
+            <p class="eyebrow">CUSTOMER</p><h2>Track Delivery</h2>
+            <p class="muted">Enter your Order ID to check the delivery status</p>
+            <form id="tracking-form" class="form-row"><input id="tracking-id" required placeholder="e.g. ORD-1001" /><button type="submit">Search</button></form>
+            <div id="tracking-result" class="result muted">No tracking information yet.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="admin-app" class="hidden">
+      <header class="topbar"><div class="container topbar-inner"><a class="brand" href="#admin-config">SDS Shop Admin</a><nav><a href="#admin-config">Product Catalog</a><button class="nav-button" id="admin-logout">Logout</button></nav></div></header>
+      <main class="container">
+        <section class="hero" id="admin-config">
+          <div><p class="eyebrow">ADMIN CONFIGURATION</p><h1>Product Catalog</h1><p class="muted">Manage products through the API Gateway.</p></div>
+          <button class="secondary" id="reload-admin-products">Reload Catalog</button>
+        </section>
+        <div id="admin-message" class="message hidden"></div>
+        <section class="panel admin-panel">
+          <h2>Add Product</h2>
+          <form id="product-form" class="admin-form">
+            <input id="product-edit-sku" type="hidden" />
+            <input id="product-sku" required placeholder="SKU" /><input id="product-name" required placeholder="Product name" />
+            <input id="product-category" placeholder="Category" /><input id="product-brand" placeholder="Brand" />
+            <input id="product-price" required type="number" min="0" step="0.01" placeholder="Price" /><input id="product-stock" required type="number" min="0" step="1" placeholder="Stock" />
+            <input id="product-image" placeholder="Image URL" /><input id="product-specs" placeholder="Specifications" />
+            <button id="product-submit" type="submit">Add Product</button>
+          </form>
+          <p class="small muted">This demo authentication is client-side only. Real authentication belongs in the API Gateway.</p>
+        </section>
+        <section class="panel admin-panel">
+          <h2>Update Delivery Status</h2>
+          <form id="delivery-status-form" class="form-row">
+            <input id="delivery-order-id" required placeholder="Order ID" />
+            <select id="delivery-status" aria-label="Delivery status">
+              <option value="PENDING">PENDING</option>
+              <option value="PROCESSING">PROCESSING</option>
+              <option value="SHIPPED">SHIPPED</option>
+              <option value="IN_TRANSIT">IN_TRANSIT</option>
+              <option value="DELIVERED">DELIVERED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+            <button type="submit">Update Status</button>
+          </form>
+          <div id="delivery-status-result" class="result muted">No delivery update yet.</div>
+          <p class="small muted">TODO: This requires the API Gateway to expose PATCH /api/deliveries/:orderId/status.</p>
+        </section>
+        <section class="panel admin-panel"><div class="section-heading"><h2>Catalog Items</h2><span id="admin-product-count" class="muted"></span></div><div id="admin-products" class="admin-products"><div class="empty">Loading catalog...</div></div></section>
+      </main>
+    </div>
+
+    <div id="checkout-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card cart-modal-card">
+        <button class="close" id="close-modal" aria-label="Close">×</button>
+        <p class="eyebrow">SHOPPING CART</p>
+        <h2>Your Cart</h2>
+        <div id="cart-items" class="cart-items"></div>
+        <div class="cart-total"><span>Total</span><strong id="cart-total-price">฿0.00</strong></div>
+        <button id="confirm-cart" type="button">Checkout</button>
+        <div id="checkout-result" class="result"></div>
+      </div>
+    </div>
+    <div id="quantity-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card quantity-modal-card">
+        <button class="close" id="close-quantity-modal" aria-label="Close">×</button>
+        <p class="eyebrow">ADD TO CART</p>
+        <h2 id="quantity-product-title">Product</h2>
+        <p id="quantity-product-price" class="muted"></p>
+        <div class="quantity-picker">
+          <button type="button" id="quantity-minus">−</button>
+          <strong id="quantity-value">1</strong>
+          <button type="button" id="quantity-plus">+</button>
+        </div>
+        <p id="quantity-stock" class="small muted"></p>
+        <button type="button" id="confirm-add-cart">Add to Cart</button>
+      </div>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>
