@@ -4,17 +4,30 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"product-catalog/models"
 	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/joho/godotenv"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 )
 
-const spreadsheetID = "1TizQw2siUgnzB88A-hfcYT1ajMn6q4pFcBYRShAKjnY"
-const sheetName = "Sheet1"
+// ค่าเหล่านี้อ่านจาก environment variable (หรือไฟล์ .env) ตอนเริ่ม main()
+var (
+	spreadsheetID   string
+	sheetName       string
+	credentialsPath string
+)
+
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
 
 func findRowBySKU(srv *sheets.Service, targetSKU string) (int, error) {
 	readRange := fmt.Sprintf("%s!A:A", sheetName) // อ่านเฉพาะคอลัมน์ A (SKU)
@@ -38,8 +51,18 @@ func getCellString(row []interface{}, colIdx int) string {
 }
 
 func main() {
+	// โหลด .env ถ้ามี (ใน Docker/K8s ไม่มีไฟล์นี้ ค่าจะมาจาก environment แทน)
+	_ = godotenv.Load()
+
+	spreadsheetID = os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
+	if spreadsheetID == "" {
+		log.Fatal("GOOGLE_SHEETS_SPREADSHEET_ID is not configured")
+	}
+	sheetName = getEnv("GOOGLE_SHEETS_TAB_NAME", "Sheet1")
+	credentialsPath = getEnv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+
 	ctx := context.Background()
-	srv, err := sheets.NewService(ctx, option.WithCredentialsFile("credentials.json"))
+	srv, err := sheets.NewService(ctx, option.WithCredentialsFile(credentialsPath))
 	if err != nil {
 		log.Fatalf("Unable to retrieve Sheets client: %v", err)
 	}

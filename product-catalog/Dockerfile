@@ -27,8 +27,8 @@ WORKDIR /app
 # คัดลอกไฟล์ที่ Build เสร็จแล้วจาก Stage 1 มาใช้งาน
 COPY --from=builder /app/api-server .
 
-# คัดลอกไฟล์ credentials.json มาด้วย (สำคัญมาก ไม่งั้นจะต่อ Google Sheets ไม่ได้)
-COPY credentials.json .
+# ไม่ใส่ credentials.json ไว้ใน image (กัน key หลุดตอน push)
+# ให้ mount เข้ามาตอนรันแทน เช่น docker compose / K8s Secret
 
 
 # เปิดพอร์ต 8081 ให้ภายนอกสามารถเชื่อมต่อเข้ามาได้
