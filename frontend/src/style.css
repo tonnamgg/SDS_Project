@@ -97,6 +97,21 @@ input, select { width: 100%; border: 1px solid #dce2f0; border-radius: 10px; pad
 .quantity-control button { padding: 4px 9px; }
 .remove-button { padding: 7px 10px; background: #fff0f0; color: #b42318; }
 .cart-total { display: flex; justify-content: space-between; padding: 16px 0; margin-bottom: 12px; border-top: 1px solid #e4e8f2; font-size: 1.1rem; }
+.wallet { display: grid; gap: 8px; padding: 14px; margin-bottom: 14px; border-radius: 10px; background: #f5f7fb; }
+.wallet-row { display: flex; justify-content: space-between; }
+.wallet-row strong.insufficient { color: #b42318; }
+.wallet-amount { margin: 4px 0 16px; font-size: 2rem; font-weight: 700; color: #536dfe; }
+.top-up-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+#top-up-form input { flex: 1; min-width: 0; }
+.nav-balance { font-size: .9rem; color: #68738a; }
+#confirm-cart { width: 100%; }
+.delivery-filters { margin-bottom: 14px; }
+.delivery-filters input { flex: 1; min-width: 0; }
+.admin-deliveries { display: grid; gap: 10px; }
+.admin-delivery-row { display: grid; grid-template-columns: 1.2fr 2fr auto auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e4e8f2; border-radius: 10px; }
+.admin-delivery-row .delivery-id { display: grid; gap: 4px; }
+.admin-delivery-row .delivery-items-list { display: grid; gap: 2px; font-size: .88rem; }
+.admin-delivery-row select { min-width: 140px; }
 .close { position: absolute; top: 12px; right: 12px; padding: 4px 10px; font-size: 1.4rem; background: transparent; color: #68738a; }
 #checkout-form { display: grid; gap: 10px; }
-@media (max-width: 720px) { .hero, .two-column { display: block; } .hero .secondary { margin-top: 20px; } .panel { margin-top: 16px; } nav { gap: 10px; font-size: .8rem; } .admin-form { grid-template-columns: 1fr; } .admin-product-row { grid-template-columns: 1fr 1fr; } .cart-item { grid-template-columns: 48px 1fr auto; } .cart-item img { width: 48px; height: 48px; } .remove-button { grid-column: 2 / -1; } }
+@media (max-width: 720px) { .hero, .two-column { display: block; } .hero .secondary { margin-top: 20px; } .panel { margin-top: 16px; } nav { gap: 10px; font-size: .8rem; } .admin-form { grid-template-columns: 1fr; } .admin-product-row { grid-template-columns: 1fr 1fr; } .cart-item { grid-template-columns: 48px 1fr auto; } .cart-item img { width: 48px; height: 48px; } .remove-button { grid-column: 2 / -1; } .admin-delivery-row { grid-template-columns: 1fr; } .delivery-filters { flex-wrap: wrap; } }

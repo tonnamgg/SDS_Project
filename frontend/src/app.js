@@ -5,7 +5,9 @@ const defaultApiBase = window.location.port === "3000"
 const API_BASE = (queryApiBase || window.FRONTEND_API_BASE || defaultApiBase).replace(/\/$/, "");
 let products = [];
 let adminProducts = [];
+let adminDeliveries = [];
 let cart = [];
+let balance = 0;
 let selectedProduct = null;
 let selectedQuantity = 1;
 
@@ -36,7 +38,7 @@ async function request(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+  if (!response.ok) throw new Error(body.error || body.reason || `Request failed (${response.status})`);
   return body;
 }
 
@@ -133,24 +135,40 @@ function openQuantitySelector(product) {
   $("quantity-modal").classList.remove("hidden");
 }
 
-async function checkout(event) {
-  event.preventDefault();
-  if (!selectedProduct) return;
-  const quantity = Number($("checkout-quantity").value);
-  const result = $("checkout-result");
-  result.textContent = "Placing order...";
+async function loadBalance() {
   try {
-    // The assignment calls this field product_id; the catalog currently exposes SKU,
-    // so SKU is used as the temporary product identifier.
-    const body = { product_id: selectedProduct.sku, quantity };
-    const response = await request("/api/checkout", { method: "POST", body: JSON.stringify(body) });
-    const orderId = response.orderId || response.order_id || response.delivery?.orderId || "No Order ID returned";
-    const deliveryStatus = response.delivery?.status || response.status || "PROCESSING";
-    result.textContent = `Order placed successfully\nOrder ID: ${orderId}\nDelivery status: ${deliveryStatus}`;
-    showMessage("Order placed successfully");
-    await loadProducts();
+    const response = await request("/api/payment/balance");
+    balance = Number(response.balance) || 0;
   } catch (error) {
-    result.textContent = `Order failed: ${error.message}`;
+    showMessage(`Failed to load balance: ${error.message}`, true);
+  }
+  renderWallet();
+}
+
+// Show the current balance and whether it covers the cart.
+function renderWallet() {
+  const total = cartTotal();
+  const after = balance - total;
+  $("nav-balance").textContent = money(balance);
+  $("wallet-panel-balance").textContent = money(balance);
+  $("wallet-balance").textContent = money(balance);
+  $("wallet-after").textContent = money(after);
+  $("wallet-after").classList.toggle("insufficient", after < 0);
+  $("go-top-up").classList.toggle("hidden", after >= 0);
+  $("confirm-cart").disabled = !cart.length || after < 0;
+  $("confirm-cart").textContent = after < 0 ? "Insufficient balance" : `Pay ${money(total)}`;
+}
+
+async function topUp(amount) {
+  if (!(amount > 0)) return;
+  try {
+    const response = await request("/api/payment/balance", { method: "POST", body: JSON.stringify({ amount }) });
+    balance = Number(response.balance) || 0;
+    $("top-up-form").reset();
+    renderWallet();
+    showToast(`Added ${money(amount)} · balance ${money(balance)}`);
+  } catch (error) {
+    showToast(`Top-up failed: ${error.message}`, "error");
   }
 }
 
@@ -195,10 +213,9 @@ function renderCart() {
   if (!cart.length) {
     container.innerHTML = '<div class="empty">Your cart is empty.</div>';
     $("cart-total-price").textContent = money(0);
-    $("confirm-cart").disabled = true;
+    renderWallet();
     return;
   }
-  $("confirm-cart").disabled = false;
   container.innerHTML = cart.map((item, index) => {
     const image = item.image_url || "https://placehold.co/80x80/eef2ff/536dfe?text=Item";
     return `<div class="cart-item">
@@ -209,6 +226,7 @@ function renderCart() {
     </div>`;
   }).join("");
   $("cart-total-price").textContent = money(cartTotal());
+  renderWallet();
   container.querySelectorAll("[data-cart-minus]").forEach((button) => button.addEventListener("click", () => changeCartQuantity(Number(button.dataset.cartMinus), -1)));
   container.querySelectorAll("[data-cart-plus]").forEach((button) => button.addEventListener("click", () => changeCartQuantity(Number(button.dataset.cartPlus), 1)));
   container.querySelectorAll("[data-cart-remove]").forEach((button) => button.addEventListener("click", () => removeFromCart(Number(button.dataset.cartRemove))));
@@ -236,29 +254,41 @@ function openCart() {
   $("checkout-result").textContent = "";
   renderCart();
   $("checkout-modal").classList.remove("hidden");
+  loadBalance();
 }
+
+const PAYMENT_ERRORS = {
+  insufficient_funds: "Insufficient balance. Please top up and try again.",
+  insufficient_stock: "Some items are no longer available. Please review your cart and try again.",
+  product_not_found: "Some items no longer exist in the catalog. Please remove them from your cart.",
+  order_id_already_exists: "This order was already placed. Your balance was refunded.",
+  delivery_service_unavailable: "Could not create the delivery. Your balance was refunded.",
+  product_catalog_unavailable: "The product catalog is unavailable. Please try again later.",
+  product_catalog_update_failed: "Could not update stock. Your balance was refunded.",
+};
 
 async function checkout() {
   if (!cart.length) return;
   const result = $("checkout-result");
-  result.textContent = "Placing order...";
+  const payButton = $("confirm-cart");
+  result.textContent = "Processing payment...";
+  payButton.disabled = true;
   try {
     const body = { items: cart.map((item) => ({ sku: item.sku, quantity: item.quantity })) };
-    const response = await request("/api/checkout", { method: "POST", body: JSON.stringify(body) });
-    const orderId = response.orderId || response.order_id || response.delivery?.orderId || "No Order ID returned";
-    const deliveryStatus = response.delivery?.status || response.status || "PROCESSING";
-    result.textContent = `Order placed successfully\nOrder ID: ${orderId}\nDelivery status: ${deliveryStatus}`;
-    showMessage("Order placed successfully");
+    const response = await request("/api/payment", { method: "POST", body: JSON.stringify(body) });
+    balance = Number(response.remaining_balance) || 0;
+    const orderId = response.order_id || response.delivery?.orderId || "No Order ID returned";
+    const deliveryStatus = response.delivery?.status || "PROCESSING";
+    result.textContent = `Payment successful\nOrder ID: ${orderId}\nPaid: ${money(response.amount)}\nRemaining balance: ${money(balance)}\nDelivery status: ${deliveryStatus}`;
+    showToast(`Paid ${money(response.amount)} · Order ${orderId}`);
+    $("tracking-id").value = orderId;
     cart = [];
     renderCart();
     await loadProducts();
   } catch (error) {
-    if (error.message.includes("insufficient_stock") || error.message.includes("stock")) {
-      result.textContent = "Checkout failed: some items are no longer available. Please review your cart and try again.";
-      showToast("Stock changed before checkout. Please review your cart.", "error");
-    } else {
-      result.textContent = `Order failed: ${error.message}`;
-    }
+    result.textContent = `Payment failed: ${PAYMENT_ERRORS[error.message] || error.message}`;
+    showToast("Payment failed", "error");
+    await Promise.all([loadBalance(), loadProducts()]);
   }
 }
 
@@ -281,6 +311,7 @@ function showCustomerApp() {
   $("admin-app").classList.add("hidden");
   $("customer-app").classList.remove("hidden");
   loadProducts();
+  loadBalance();
 }
 
 function showAdminApp() {
@@ -288,6 +319,7 @@ function showAdminApp() {
   $("customer-app").classList.add("hidden");
   $("admin-app").classList.remove("hidden");
   loadAdminProducts();
+  loadAdminDeliveries();
 }
 
 function logout() {
@@ -399,22 +431,82 @@ async function deleteProduct(sku) {
   }
 }
 
-async function updateDeliveryStatus(event) {
-  event.preventDefault();
-  const orderId = $("delivery-order-id").value.trim();
-  const status = $("delivery-status").value;
-  const result = $("delivery-status-result");
-  result.textContent = "Updating delivery status...";
+const DELIVERY_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "IN_TRANSIT", "DELIVERED", "CANCELLED"];
+
+function renderAdminDeliveries() {
+  const search = $("delivery-search").value.trim().toLowerCase();
+  const filter = $("delivery-filter").value;
+  const visible = adminDeliveries.filter((delivery) => {
+    if (filter && delivery.status !== filter) return false;
+    if (!search) return true;
+    return delivery.orderId.toLowerCase().includes(search)
+      || (delivery.items || []).some((item) => String(item.sku || "").toLowerCase().includes(search));
+  });
+  $("admin-delivery-count").textContent = `${visible.length} of ${adminDeliveries.length} orders`;
+  const container = $("admin-deliveries");
+  if (!visible.length) {
+    container.innerHTML = '<div class="empty">No deliveries found.</div>';
+    return;
+  }
+  container.innerHTML = visible.map((delivery) => {
+    const status = String(delivery.status || "PENDING").toUpperCase();
+    const items = (delivery.items || []).length
+      ? delivery.items.map((item) => `<span>${escapeHtml(item.name || item.sku)} <span class="muted">(${escapeHtml(item.sku)})</span> × ${escapeHtml(item.quantity)}</span>`).join("")
+      : '<span class="muted">No items</span>';
+    return `<div class="admin-delivery-row">
+      <div class="delivery-id">
+        <strong>${escapeHtml(delivery.orderId)}</strong>
+        <span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status.replaceAll("_", " "))}</span>
+        <span class="small muted">Updated ${escapeHtml(formatDate(delivery.updatedAt))}</span>
+      </div>
+      <div class="delivery-items-list">${items}</div>
+      <select data-delivery-status="${escapeHtml(delivery.orderId)}" aria-label="Status for ${escapeHtml(delivery.orderId)}">
+        ${DELIVERY_STATUSES.map((option) => `<option value="${option}" ${option === status ? "selected" : ""}>${option}</option>`).join("")}
+      </select>
+      <button type="button" data-save-delivery="${escapeHtml(delivery.orderId)}">Save</button>
+    </div>`;
+  }).join("");
+  container.querySelectorAll("[data-save-delivery]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const orderId = button.dataset.saveDelivery;
+      const select = [...container.querySelectorAll("[data-delivery-status]")].find((element) => element.dataset.deliveryStatus === orderId);
+      updateDeliveryStatus(orderId, select.value, button);
+    });
+  });
+}
+
+async function loadAdminDeliveries() {
+  $("admin-deliveries").innerHTML = '<div class="empty">Loading deliveries...</div>';
+  try {
+    const deliveries = await request("/api/delivery");
+    // Newest orders first.
+    adminDeliveries = deliveries.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  } catch (error) {
+    adminDeliveries = [];
+    showAdminMessage(`Failed to load deliveries: ${error.message}`, true);
+  }
+  renderAdminDeliveries();
+}
+
+async function updateDeliveryStatus(orderId, status, button) {
+  const delivery = adminDeliveries.find((entry) => entry.orderId === orderId);
+  if (delivery && delivery.status === status) {
+    showToast(`${orderId} is already ${status}`, "error");
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Saving...";
   try {
     const response = await request(`/api/delivery/${encodeURIComponent(orderId)}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
-    result.textContent = `Updated ${response.orderId || orderId} to ${response.status || status}`;
-    showAdminMessage("Delivery status updated successfully");
+    if (delivery) Object.assign(delivery, response);
+    showToast(`Updated ${orderId} to ${response.status || status}`);
   } catch (error) {
-    result.textContent = `Unable to update delivery status: ${error.message}\n(TODO: API Gateway delivery route is not available yet.)`;
+    showToast(`Failed to update ${orderId}: ${error.message}`, "error");
   }
+  renderAdminDeliveries();
 }
 
 $("auth-form").addEventListener("submit", (event) => {
@@ -432,11 +524,21 @@ $("customer-logout").addEventListener("click", logout);
 $("admin-logout").addEventListener("click", logout);
 $("product-form").addEventListener("submit", addProduct);
 $("reload-admin-products").addEventListener("click", loadAdminProducts);
-$("delivery-status-form").addEventListener("submit", updateDeliveryStatus);
+$("reload-deliveries").addEventListener("click", loadAdminDeliveries);
+$("delivery-search").addEventListener("input", renderAdminDeliveries);
+$("delivery-filter").addEventListener("change", renderAdminDeliveries);
 
 $("reload-products").addEventListener("click", loadProducts);
 $("open-cart").addEventListener("click", openCart);
 $("confirm-cart").addEventListener("click", checkout);
+$("top-up-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  topUp(Number($("top-up-amount").value));
+});
+document.querySelectorAll("[data-top-up]").forEach((button) => {
+  button.addEventListener("click", () => topUp(Number(button.dataset.topUp)));
+});
+$("go-top-up").addEventListener("click", () => $("checkout-modal").classList.add("hidden"));
 $("quantity-minus").addEventListener("click", () => changeSelectedQuantity(-1));
 $("quantity-plus").addEventListener("click", () => changeSelectedQuantity(1));
 $("confirm-add-cart").addEventListener("click", confirmAddToCart);
