@@ -42,7 +42,8 @@ Create a delivery (your checkout workflow should call this only after payment su
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://localhost:8083/deliveries `
-  -ContentType "application/json" -Body '{"orderId":"ORD-1001"}'
+  -ContentType "application/json" `
+  -Body '{"orderId":"ORD-1001","items":[{"sku":"CPU-INT-14900K","name":"Intel Core i9-14900K","quantity":1}]}'
 ```
 
 Get a delivery by order ID:
@@ -72,7 +73,7 @@ Build and run:
 
 ```powershell
 docker build -t YOUR_DOCKERHUB_USERNAME/delivery-service:1.0.0 .
-docker run --rm -p 8083:8083 `
+docker run --rm --name delivery-service --network sds-network -p 8083:8083 `
   -e PORT=8083 `
   -e GOOGLE_SHEETS_SPREADSHEET_ID="YOUR_SPREADSHEET_ID" `
   -e GOOGLE_SHEETS_TAB_NAME="Deliveries" `
